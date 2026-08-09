@@ -9,5 +9,7 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app connects to the POS server and thermal printer on your local network.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>This app uses Bluetooth to connect to ESC/POS thermal printers (e.g. VSC TM-58D PRO).</string>
 </dict>
 </plist>

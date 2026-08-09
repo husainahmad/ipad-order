@@ -464,11 +464,12 @@ struct ProductImageThumb: View {
     let product: Product
 
     var body: some View {
-        if let data = imageData, let uiImage = UIImage(data: data) {
+        if let uiImage = ProductImageCache.image(for: product) {
             Image(uiImage: uiImage)
                 .resizable()
-                .scaledToFit()
-                .padding(8)
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
         } else {
             ZStack {
                 Color.posSurfaceVariant
@@ -477,12 +478,6 @@ struct ProductImageThumb: View {
                     .foregroundColor(Color.posAccent.opacity(0.4))
             }
         }
-    }
-
-    private var imageData: Data? {
-        let blob = product.productImage?.imageBlobValue ?? ""
-        guard !blob.isEmpty else { return nil }
-        return Data(base64Encoded: blob)
     }
 }
 
