@@ -23,6 +23,7 @@ struct Order: Codable, Identifiable, Hashable {
     let customerName: String?
     let remark: String?
     let status: String?
+    let storeServiceTypesId: Int?
     let subTotal: Double?
     let discountTotal: Double?
     let grandTotal: Double?
@@ -42,6 +43,14 @@ struct Order: Codable, Identifiable, Hashable {
     var isConfirmed: Bool { statusValue.lowercased() == "confirmed" }
     var isPaid: Bool { statusValue.lowercased() == "paid" }
     var isVoid: Bool { statusValue.lowercased() == "void" }
+
+    var storeServiceName: String {
+        switch storeServiceTypesId {
+        case 1: return "DINEIN"
+        case 3: return "TAKEWAY"
+        default: return "-"
+        }
+    }
 
     var paymentName: String {
         guard let paymentId = orderPayment?.paymentId else { return "UNPAID" }

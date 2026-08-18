@@ -8,7 +8,7 @@ struct OrderConfirmSheet: View {
     let existingOrder: Order?
     let onSuccess: (() -> Void)?
 
-    @State private var selectedPayment = 2 // QR
+    @State private var selectedPayment = 1 // CASH
     @State private var cashReceived = 0.0
     @State private var statusMessage: String?
     @State private var working = false
@@ -85,11 +85,11 @@ struct OrderConfirmSheet: View {
         ScrollView {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 12) {
-                    orderSummaryBox
-                    totalsBox
                     if isCartMode {
                         inputsBox
                     }
+                    orderSummaryBox
+                    totalsBox
                 }
                 .frame(maxWidth: .infinity)
 
@@ -181,12 +181,17 @@ struct OrderConfirmSheet: View {
                 .foregroundColor(.posPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            HStack(spacing: 8) {
+                confirmTypeCard(title: "DINE IN", icon: "fork.knife", id: 1)
+                confirmTypeCard(title: "TAKE AWAY", icon: "takeoutbag.and.cup.and.straw", id: 3)
+            }
+
             TextField("Customer Name", text: $tab.customer)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
 
-            TextField("Discount", text: $tab.discount)
+            TextField("Discount", text: discountBinding)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-                .keyboardType(.decimalPad)
+                .keyboardType(.numberPad)
 
             TextField("Additional notes...", text: $tab.remark)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -194,6 +199,37 @@ struct OrderConfirmSheet: View {
         .padding(16)
         .background(Color.posBgLight)
         .cornerRadius(8)
+    }
+
+    private func confirmTypeCard(title: String, icon: String, id: Int) -> some View {
+        let selected = tab.storeServiceTypesId == id
+        return Button {
+            tab.storeServiceTypesId = id
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(selected ? .posPrimaryDark : .posGrayButton)
+                Text(title)
+                    .font(.system(size: 14, weight: selected ? .bold : .regular))
+                    .foregroundColor(selected ? .posPrimaryDark : .posTextSecondary)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.posAccent)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(selected ? Color.posAccentSoft : Color.posBgLight)
+            .overlay(
+                RoundedRectangle(cornerRadius: PosShape.cornerMedium)
+                    .stroke(selected ? Color.posAccent : Color.posDivider, lineWidth: selected ? 2 : 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: PosShape.cornerMedium))
+        }
+        .buttonStyle(.plain)
     }
 
     private var paymentSection: some View {
@@ -423,7 +459,7 @@ struct OrderConfirmSheet: View {
 
     private var discountValue: Double {
         if isCartMode {
-            return Double(tab.discount.isEmpty ? "0" : tab.discount) ?? 0
+            return Double(CurrencyUtils.digitsOnly(tab.discount)) ?? 0
         }
         return existingOrder?.discountTotalValue ?? 0
     }
@@ -437,6 +473,15 @@ struct OrderConfirmSheet: View {
 
     private var change: Double {
         max(0, cashReceived - totalValue)
+    }
+
+    private var discountBinding: Binding<String> {
+        Binding(
+            get: { tab.discount },
+            set: { newValue in
+                tab.discount = CurrencyUtils.formatWholeInput(newValue)
+            }
+        )
     }
 
     // MARK: - Actions
@@ -454,7 +499,7 @@ struct OrderConfirmSheet: View {
                 let orderToPay: Order
                 if isCartMode {
                     let success = await formVM.confirmOrder(customerName: tab.customer,
-                                                            discount: tab.discount,
+                                                            discount: CurrencyUtils.digitsOnly(tab.discount),
                                                             remark: tab.remark)
                     guard success, let order = formVM.confirmedOrder else {
                         statusMessage = formVM.error ?? "Failed to confirm order"

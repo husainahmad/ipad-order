@@ -8,6 +8,7 @@ final class OrderTab: ObservableObject, Identifiable {
     @Published var customer: String
     @Published var discount: String
     @Published var remark: String
+    @Published var storeServiceTypesId: Int = 1
     @Published var categories: [Category] = []
     @Published var products: [Product] = []
     @Published var selectedCategoryId: Int?
@@ -49,7 +50,7 @@ final class OrderFormViewModel: ObservableObject {
 
     var activeDiscount: Double {
         guard let tab = activeTab else { return 0 }
-        return Double(tab.discount.isEmpty ? "0" : tab.discount) ?? 0
+        return Double(CurrencyUtils.digitsOnly(tab.discount)) ?? 0
     }
 
     var subtotal: Double {
@@ -87,6 +88,10 @@ final class OrderFormViewModel: ObservableObject {
 
     func setRemark(_ value: String) {
         activeTab?.remark = value
+    }
+
+    func setStoreServiceType(_ id: Int) {
+        activeTab?.storeServiceTypesId = id
     }
 
     func addToCart(product: Product, sku: Sku) {
@@ -198,7 +203,8 @@ final class OrderFormViewModel: ObservableObject {
                                               categoryId: first.categoryId,
                                               orderDetailSkus: skus))
         }
-        return OrderRequest(customerName: customerName, remark: remark,
+        return OrderRequest(storeServiceTypesId: tab.storeServiceTypesId,
+                            customerName: customerName, remark: remark,
                             orderDetails: details, discount: discount)
     }
 }

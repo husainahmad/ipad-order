@@ -12,14 +12,15 @@ struct OrdersView: View {
     @State private var settlement: Settlement?
 
     private let columns: [(String, CGFloat)] = [
-        ("Order No", 1.2),
-        ("Date", 1.3),
+        ("Order No", 2.0),
+        ("Date", 1.0),
         ("Customer", 1.2),
         ("Payment", 0.7),
         ("Status", 0.8),
         ("Sub Total", 0.9),
         ("Discount", 0.8),
         ("Total", 1.0),
+        ("Type", 0.8),
     ]
 
     var body: some View {
@@ -183,10 +184,10 @@ private struct OrderRow: View {
                 .fontWeight(.semibold)
                 .foregroundColor(.posPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(1.2))
+                .frame(width: rel(2.0))
             Text(TimeUtils.toJakarta(order.createdAtValue))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(1.3))
+                .frame(width: rel(1.0))
             Text(order.customerNameValue.isEmpty ? "-" : order.customerNameValue)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -215,12 +216,25 @@ private struct OrderRow: View {
                 .foregroundColor(.posPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(width: rel(1.0))
+            Text(order.storeServiceName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(serviceColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(serviceColor.opacity(0.12))
+                .clipShape(Capsule())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(width: rel(0.8))
         }
         .font(.system(size: 13))
         .foregroundColor(.posTextPrimary)
         .padding(.horizontal, 8)
         .frame(height: 56)
         .background(isEven ? Color.white : Color.posRowOdd)
+    }
+
+    private var serviceColor: Color {
+        order.storeServiceTypesId == 3 ? .posStatusConfirmed : .posPrimary
     }
 
     private var statusColor: Color {
@@ -230,7 +244,7 @@ private struct OrderRow: View {
     }
 
     private func rel(_ weight: CGFloat) -> CGFloat {
-        weight / 7.9 * width
+        weight / 9.2 * width
     }
 }
 

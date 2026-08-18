@@ -9,6 +9,12 @@ struct OrderDetailSheet: View {
     @State private var showVoidConfirm = false
     @State private var voiding = false
     @State private var statusMessage: String?
+    @State private var previewMode: PreviewMode = .receipt
+
+    enum PreviewMode: String, CaseIterable {
+        case receipt = "Receipt Preview"
+        case kitchen = "Kitchen Print"
+    }
 
     var body: some View {
         VStack(spacing: 14) {
@@ -29,21 +35,52 @@ struct OrderDetailSheet: View {
                     .clipShape(Capsule())
             }
 
+            if !order.customerNameValue.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(.posPrimary)
+                    Text(order.customerNameValue)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.posTextPrimary)
+                    Spacer()
+                    Text(order.storeServiceName)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.posPrimaryDark)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.posAccentSoft)
+                        .clipShape(Capsule())
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 40)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posDivider, lineWidth: 1))
+            }
+
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
                     Image(systemName: "printer")
                         .font(.system(size: 13))
                         .foregroundColor(.posPrimary)
-                    Text("Receipt Preview")
+                    Text(previewMode.rawValue)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.posPrimary)
                     Spacer()
+                    Picker("Preview", selection: $previewMode) {
+                        ForEach(PreviewMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 260)
                 }
                 .padding(12)
                 .background(Color.posAccentSoft)
 
                 ScrollView {
-                    Text(PrintUtils.buildReceiptText(order))
+                    Text(previewText)
                         .font(.system(size: 14, design: .monospaced))
                         .foregroundColor(.posTextPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -109,6 +146,13 @@ struct OrderDetailSheet: View {
         }
     }
 
+    private var previewText: String {
+        switch previewMode {
+        case .receipt: return PrintUtils.buildReceiptText(order)
+        case .kitchen: return PrintUtils.buildKitchenText(order)
+        }
+    }
+
     private func printText(_ text: String) {
         statusMessage = "Printing..."
         PrinterManager.print(text) { result in
@@ -140,7 +184,7 @@ struct OrderDetailSheet: View {
 
 #Preview {
     OrderDetailSheet(order: Order(id: 1, orderNo: "ORD-1", customerName: "", remark: "",
-                                  status: "CONFIRMED", subTotal: 10000, discountTotal: 0,
+                                  status: "CONFIRMED", storeServiceTypesId: 1, subTotal: 10000, discountTotal: 0,
                                   grandTotal: 10000, createdAt: "", orderPayment: nil,
                                   orderDetails: nil))
         .environmentObject(OrdersViewModel())

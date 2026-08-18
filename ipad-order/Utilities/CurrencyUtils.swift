@@ -36,4 +36,14 @@ enum CurrencyUtils {
     static func formatPlain(_ value: Double) -> String {
         String(format: "%.2f", value)
     }
+
+    static func digitsOnly(_ raw: String) -> String {
+        raw.filter { $0.isNumber }
+    }
+
+    static func formatWholeInput(_ raw: String) -> String {
+        let digits = digitsOnly(raw)
+        guard let number = Double(digits) else { return "" }
+        return wholeFormatter.string(from: NSNumber(value: number)) ?? ""
+    }
 }

@@ -91,6 +91,27 @@ struct ProductDetailSheet: View {
             }
             .padding(20)
         }
+        .sheetHeight(dynamicHeight)
+    }
+
+    private var dynamicHeight: CGFloat {
+        let skuCount = product.skus?.count ?? 0
+        let contentHeight = 132 + CGFloat(skuCount) * 56 + 90
+        return min(max(contentHeight, 330), 620)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func sheetHeight(_ height: CGFloat) -> some View {
+        if #available(iOS 16.4, *) {
+            self.presentationDetents([.height(height)])
+                .presentationCornerRadius(16)
+        } else if #available(iOS 16.0, *) {
+            self.presentationDetents([.height(height)])
+        } else {
+            self
+        }
     }
 }
 

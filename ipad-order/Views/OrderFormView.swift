@@ -171,6 +171,8 @@ struct OrderFormView: View {
             .frame(height: 52)
             .background(Color.posPrimaryGradient)
 
+            serviceTypeSelector
+
             if tab.items.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "cart.badge.plus")
@@ -265,6 +267,52 @@ struct OrderFormView: View {
         tab.items.reduce(0) { $0 + $1.quantity }
     }
 
+    private var serviceTypeSelector: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Order Type")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.posTextSecondary)
+            HStack(spacing: 8) {
+                serviceTypeCard(title: "DINE IN", icon: "fork.knife", id: 1)
+                serviceTypeCard(title: "TAKE AWAY", icon: "takeoutbag.and.cup.and.straw", id: 3)
+            }
+        }
+        .padding(12)
+        .background(Color.white)
+        .overlay(Rectangle().fill(Color.posDivider).frame(height: 1), alignment: .bottom)
+    }
+
+    private func serviceTypeCard(title: String, icon: String, id: Int) -> some View {
+        let selected = tab.storeServiceTypesId == id
+        return Button {
+            formVM.setStoreServiceType(id)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 15))
+                    .foregroundColor(selected ? .posPrimaryDark : .posGrayButton)
+                Text(title)
+                    .font(.system(size: 14, weight: selected ? .bold : .regular))
+                    .foregroundColor(selected ? .posPrimaryDark : .posTextSecondary)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 15))
+                        .foregroundColor(.posAccent)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(selected ? Color.posAccentSoft : Color.posBgLight)
+            .overlay(
+                RoundedRectangle(cornerRadius: PosShape.cornerMedium)
+                    .stroke(selected ? Color.posAccent : Color.posDivider, lineWidth: selected ? 2 : 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: PosShape.cornerMedium))
+        }
+        .buttonStyle(.plain)
+    }
+
     private var groupedItems: [CartGroup] {
         var groups: [Int: CartGroup] = [:]
         for item in tab.items {
@@ -341,6 +389,7 @@ struct OrderFormView: View {
         var sb = ""
         sb += "KOPI HARMONI - KP\n"
         sb += "----------------------------\n"
+        sb += "Type   : \(tab.storeServiceTypesId == 3 ? "TAKE AWAY" : "DINE IN")\n"
         sb += "Cust : \(tab.customer)\n\n"
         for group in groupedItems {
             sb += group.productName + "\n"
