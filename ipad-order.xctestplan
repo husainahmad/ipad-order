@@ -1,0 +1,37 @@
+{
+  "configurations" : [
+    {
+      "id" : "6A01621F-20CD-42FE-9285-ADF9238A7913",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:ipad-order.xcodeproj",
+      "identifier" : "38397D373027043A002E70B4",
+      "name" : "ipad-order"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:ipad-order.xcodeproj",
+        "identifier" : "38397D443027043E002E70B4",
+        "name" : "ipad-orderTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:ipad-order.xcodeproj",
+        "identifier" : "38397D4E3027043E002E70B4",
+        "name" : "ipad-orderUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

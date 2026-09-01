@@ -6,7 +6,7 @@ enum ConfigManager {
     private static let keyHost = "server_host"
     private static let keyPort = "server_port"
 
-    private static let defaultHost = "localhost"
+    private static let defaultHost = "103.150.197.7"
     private static let defaultPort = 8080
 
     static var host: String {

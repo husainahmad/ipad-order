@@ -116,6 +116,7 @@ struct LoginView: View {
                 .shadow(color: Color.black.opacity(0.22), radius: 30, x: 0, y: 16)
                 .frame(width: 440)
             }
+            .dismissKeyboardOnTap()
         }
     }
 

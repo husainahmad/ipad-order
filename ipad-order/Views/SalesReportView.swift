@@ -20,8 +20,13 @@ struct SalesReportView: View {
         VStack(spacing: 0) {
             header
             dateBar
-            columnHeader
-            reportBody
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    columnHeader
+                    reportBody
+                }
+                .frame(minWidth: 830)
+            }
             totalFooter
             if let error = viewModel.error, !error.isEmpty {
                 Text(error)
@@ -50,16 +55,12 @@ struct SalesReportView: View {
             Button {
                 dismiss()
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.left")
-                    Text("Back")
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.15))
-                .clipShape(Capsule())
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.15))
+                    .clipShape(Circle())
             }
             .buttonStyle(.plain)
         }
@@ -84,8 +85,9 @@ struct SalesReportView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(Color.white)
+            .background(Color.posRowEven)
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
 
             HStack(spacing: 10) {
                 Image(systemName: "calendar")
@@ -101,8 +103,9 @@ struct SalesReportView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(Color.white)
+            .background(Color.posRowEven)
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
 
             Button {
                 startDate = formatter.string(from: startDateValue)
@@ -195,8 +198,8 @@ struct SalesReportView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
-        .background(Color.white)
-        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: -2)
+        .background(Color.posRowEven)
+        .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: -2)
     }
 }
 
@@ -218,7 +221,7 @@ private struct SalesReportRowView: View {
         .foregroundColor(.posTextPrimary)
         .padding(.horizontal, 4)
         .frame(height: 40)
-        .background(isEven ? Color.white : Color.posRowOdd)
+        .background(isEven ? Color.posRowEven : Color.posRowOdd)
     }
 
     private func cell(_ text: String, width: CGFloat) -> some View {

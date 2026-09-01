@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftUI
 
 final class OrderTab: ObservableObject, Identifiable {
     let id: Int
@@ -120,6 +121,14 @@ final class OrderFormViewModel: ObservableObject {
               let index = tab.items.firstIndex(where: { $0.productId == productId && $0.skuId == skuId }) else { return }
         tab.items[index].addQuantity(-1)
         if tab.items[index].quantity <= 0 {
+            tab.items.remove(at: index)
+        }
+    }
+
+    func removeItem(productId: Int, skuId: Int) {
+        guard let tab = activeTab,
+              let index = tab.items.firstIndex(where: { $0.productId == productId && $0.skuId == skuId }) else { return }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
             tab.items.remove(at: index)
         }
     }

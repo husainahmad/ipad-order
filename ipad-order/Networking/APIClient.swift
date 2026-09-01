@@ -172,16 +172,22 @@ final class APIClient {
             throw ApiError.invalidResponse
         }
 
-        if http.statusCode == 401, authenticated {
+        if (http.statusCode == 401 || http.statusCode == 403), authenticated {
             let refreshed = await refreshGate.perform { await self.refreshAccessToken() }
             if refreshed {
                 return try await send(method: method, base: base, path: path,
                                       body: body, query: query, authenticated: authenticated)
             }
+            TokenManager.clearTokens()
+            NotificationCenter.default.post(name: .didReceiveNotAuthenticated, object: nil)
             throw ApiError.notAuthenticated
         }
 
         guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 403 {
+                // No retry for permission-denied without auth context
+                throw ApiError.http(http.statusCode)
+            }
             throw ApiError.http(http.statusCode)
         }
 

@@ -1,0 +1,7 @@
+/* Receipt - Indonesian (default) */
+"receipt.thank_you" = "Terima kasih";
+"receipt.see_you" = "Sampai jumpa kembali!";
+
+"receipt.header" = "KOPI HARMONI";
+"settings.receiptLanguage" = "Bahasa Struk";
+"settings.receiptLanguage.system" = "Sistem";

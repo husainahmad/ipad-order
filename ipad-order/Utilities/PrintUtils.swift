@@ -4,6 +4,29 @@ enum PrintUtils {
 
     static let lineWidth = 32
 
+    // MARK: - Receipt language (random single per print, with native font raster)
+    static let receiptLanguages = ["id","en","jv","su","ban","min","bug","mad","ar","ja","ko","zh-Hans","fr","de","es"]
+    static var receiptLanguage: String { receiptLanguages.randomElement() ?? "id" }
+
+    static func setReceiptLanguage(_ lang: String) {
+        // Kept for Settings compatibility, but print now random — ignoring stored value
+        UserDefaults.standard.set(lang, forKey: "receiptLanguage")
+    }
+
+    static func localized(_ key: String, lang: String) -> String {
+        if let path = Bundle.main.path(forResource: lang, ofType: "lproj"),
+           let bundle = Bundle(path: path) {
+            let val = bundle.localizedString(forKey: key, value: nil, table: nil)
+            if val != key { return val }
+        }
+        return NSLocalizedString(key, comment: "")
+    }
+
+    static func localized(_ key: String) -> String {
+        // Random per call would give mismatched thank_you/see_you languages → pick per receipt below
+        return NSLocalizedString(key, comment: "")
+    }
+
     static func buildReceiptText(_ order: Order) -> String {
         var sb = ""
         sb += centered("KOPI HARMONI")
@@ -37,8 +60,10 @@ enum PrintUtils {
             sb += twoCol(left: "Note", right: order.remarkValue)
         }
         sb += separator()
-        sb += centered("Terima kasih")
-        sb += centered("Sampai jumpa kembali!")
+        // Single random language footer with native font raster (ESCPosEncoder detects per line)
+        let lang = receiptLanguages.randomElement() ?? "id"
+        sb += centered(localized("receipt.thank_you", lang: lang))
+        sb += centered(localized("receipt.see_you", lang: lang))
         return sb
     }
 

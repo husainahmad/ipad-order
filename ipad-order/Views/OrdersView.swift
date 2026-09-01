@@ -106,6 +106,7 @@ struct OrdersView: View {
         .frame(height: 46)
         .background(Color.posSurfaceContainer)
         .overlay(Rectangle().fill(Color.posDivider).frame(height: 1), alignment: .bottom)
+        .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
     }
 
     private func orderList(width: CGFloat) -> some View {
@@ -113,6 +114,7 @@ struct OrdersView: View {
             LazyVStack(spacing: 0) {
                 ForEach(Array(ordersVM.orders.enumerated()), id: \.element.id) { index, order in
                     Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         selectedOrder = order
                     } label: {
                         OrderRow(order: order, isEven: index % 2 == 0, width: width)
@@ -120,6 +122,10 @@ struct OrdersView: View {
                     .buttonStyle(.plain)
                 }
             }
+        }
+        .refreshable {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            await ordersVM.loadOrders()
         }
     }
 
@@ -167,8 +173,9 @@ struct OrdersView: View {
 
     private func loadSettlement() {
         Task {
-            settlement = await ordersVM.loadSettlement()
-            showSettlement = settlement != nil
+            if let settlement = await ordersVM.loadSettlement() {
+                PrinterManager.print(PrintUtils.buildSettlementPrintText(settlement)) { _ in }
+            }
         }
     }
 }
@@ -182,17 +189,20 @@ private struct OrderRow: View {
         HStack(spacing: 0) {
             Text(order.orderNoValue)
                 .fontWeight(.semibold)
-                .foregroundColor(.posPrimary)
+                .foregroundColor(isEven ? .posTextPrimary : .posPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(width: rel(2.0))
             Text(TimeUtils.toJakarta(order.createdAtValue))
+                .foregroundColor(.posTextPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(width: rel(1.0))
             Text(order.customerNameValue.isEmpty ? "-" : order.customerNameValue)
+                .foregroundColor(.posTextPrimary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(width: rel(1.2))
             Text(order.paymentName)
+                .foregroundColor(.posTextPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(width: rel(0.7))
             Text(order.statusValue)
@@ -205,6 +215,7 @@ private struct OrderRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(width: rel(0.8))
             Text(CurrencyUtils.formatRp(order.subTotalValue))
+                .foregroundColor(.posTextPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(width: rel(0.9))
             Text(CurrencyUtils.formatRp(order.discountTotalValue))
@@ -230,7 +241,7 @@ private struct OrderRow: View {
         .foregroundColor(.posTextPrimary)
         .padding(.horizontal, 8)
         .frame(height: 56)
-        .background(isEven ? Color.white : Color.posRowOdd)
+        .background(isEven ? Color.posRowEven : Color.posRowOdd)
     }
 
     private var serviceColor: Color {
@@ -264,6 +275,15 @@ struct SettlementSheet: View {
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.posTextPrimary)
                 Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.posTextSecondary)
+                        .frame(width: 30, height: 30)
+                        .background(Color.posBgLight)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
             }
 
             VStack(alignment: .leading, spacing: 0) {
@@ -312,7 +332,7 @@ struct SettlementSheet: View {
         }
         .padding(16)
         .background(Color.posBgLight)
-        .frame(minWidth: 600, minHeight: 460)
+        .frame(minWidth: 560, minHeight: 440)
     }
 
     private func printSettlement() {

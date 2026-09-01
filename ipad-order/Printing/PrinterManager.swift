@@ -43,9 +43,13 @@ final class PrinterManager: NSObject, ObservableObject {
 
     // KT6368A dual-mode Bluetooth chip UUIDs (used by VSC TM-58D PRO and similar).
     // Android connects via SPP (Classic Bluetooth), iOS connects via BLE.
+    // SM58 often advertises generic SPP or FFE0, so we support both specific and generic.
     private static let bleServiceUUID = CBUUID(string: "49535343-FE7D-4AE5-8FA9-9FAFD205E455")
     private static let bleWriteUUID = CBUUID(string: "49535343-8841-43F4-A8D4-ECBE34729BB3")
     private static let bleNotifyUUID = CBUUID(string: "49535343-1E4D-4BD9-BA61-23C647249616")
+    private static let genericServiceUUIDs: [CBUUID] = [
+        CBUUID(string: "FFE0"), CBUUID(string: "FF00"), CBUUID(string: "18F0")
+    ]
 
     // MARK: - Published state (for the Settings UI)
 
@@ -96,20 +100,67 @@ final class PrinterManager: NSObject, ObservableObject {
         defaults.set(name, forKey: keyPrinterName)
     }
 
-    // MARK: - Public print dispatch
+    // MARK: - Public print dispatch (hybrid ESC/POS)
 
     /// Print text using the currently configured printer type (network or Bluetooth LE).
+    /// Hybrid: ASCII/Latin → ESC/POS text, Unicode → raster via iPad rendering
     static func print(_ text: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        let data = encodeForPrinter(text)
+        printData(data, completion: completion)
+    }
+
+    /// Direct Data print (already ESC/POS encoded)
+    static func printData(_ data: Data, completion: @escaping (Result<Void, Error>) -> Void) {
         if type == typeBluetooth {
-            shared.printViaBLE(text, completion: completion)
+            shared.printViaBLEData(data, completion: completion)
         } else {
-            printViaNetwork(text, completion: completion)
+            printViaNetworkData(data, completion: completion)
         }
     }
 
-    // MARK: - Network printing
+    /// Hybrid encoder — keeps public String API but internally converts to ESC/POS Data
+    static func encodeForPrinter(_ text: String) -> Data {
+        let config = PrinterConfiguration.default
+        let encoder = ESCPosEncoder(configuration: config)
+        // Debug logging
+        ESCPosEncoder.debugLog(receipt: text, configuration: config)
+        return encoder.encodeReceipt(text)
+    }
+
+    /// Unicode test (58mm) — prints multilingual sample for SM58
+    static func printUnicodeTest(completion: @escaping (Result<Void, Error>) -> Void = { _ in }) {
+        var sb = ""
+        sb += "HARMONI POS - UNICODE TEST\n"
+        sb += "--------------------------------\n"
+        sb += "1. English: Hello World\n"
+        sb += "2. Indonesian: Terima kasih\n"
+        sb += "3. Japanese: こんにちは / ありがとうございます / コーヒー\n"
+        sb += "4. Chinese: 你好 / 谢谢 / 咖啡\n"
+        sb += "5. Korean: 안녕하세요 / 감사합니다 / 커피\n"
+        sb += "6. Arabic: مرحبا / شكراً\n"
+        sb += "7. Mixed: Coffee / コーヒー / 咖啡 / 커피\n"
+        sb += "8. Currency: Rp 17.000 / Rp 125.000\n"
+        sb += "9. Symbols: ★ ☆ ✓ ×\n"
+        sb += "--------------------------------\n"
+        sb += "Receipt demo:\n"
+        sb += "Coffee Latte              18.000\n"
+        sb += "Kopi Gula Aren            17.000\n"
+        sb += "商品名: コーヒー\n"
+        sb += "数量: 2\n"
+        sb += "商品名称: 咖啡\n"
+        sb += "수량: 2\n"
+        sb += "شكراً\n"
+        sb += "--------------------------------\n"
+        print(sb, completion: completion)
+    }
+
+    // MARK: - Network printing (hybrid: Data already ESC/POS encoded)
 
     private static func printViaNetwork(_ text: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        printViaNetworkData(encodeForPrinter(text), completion: completion)
+    }
+
+    private static func printViaNetworkData(_ data: Data, completion: @escaping (Result<Void, Error>) -> Void) {
         let targetAddress = address
         guard !targetAddress.trimmingCharacters(in: .whitespaces).isEmpty else {
             completion(.failure(PrinterError.addressNotSet))
@@ -125,7 +176,6 @@ final class PrinterManager: NSObject, ObservableObject {
         connection.stateUpdateHandler = { state in
             switch state {
             case .ready:
-                let data = buildBytes(text)
                 connection.send(content: data, completion: .contentProcessed { error in
                     if let error = error {
                         completion(.failure(PrinterError.connectionFailed(error.localizedDescription)))
@@ -147,10 +197,12 @@ final class PrinterManager: NSObject, ObservableObject {
     // MARK: - Bluetooth LE printing
 
     /// Scan for nearby BLE thermal printers.
+    /// SM58 often not advertising 49535343, so scan generic (nil) + specific to catch both.
     func startScan() {
         guard let cm = centralManager, cm.state == .poweredOn else { return }
         discoveredPeripherals.removeAll()
-        cm.scanForPeripherals(withServices: [Self.bleServiceUUID],
+        // nil = generic scan to catch SM58 / RP58 / M58 / generic FFE0
+        cm.scanForPeripherals(withServices: nil,
                               options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
         isScanning = true
     }
@@ -175,6 +227,10 @@ final class PrinterManager: NSObject, ObservableObject {
     }
 
     private func printViaBLE(_ text: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        printViaBLEData(Self.encodeForPrinter(text), completion: completion)
+    }
+
+    private func printViaBLEData(_ data: Data, completion: @escaping (Result<Void, Error>) -> Void) {
         guard let cm = centralManager else {
             completion(.failure(PrinterError.bluetoothNotReady))
             return
@@ -193,12 +249,9 @@ final class PrinterManager: NSObject, ObservableObject {
             break
         }
 
-        let data = Self.buildBytes(text)
-
         if let peripheral = connectedPeripheral, let writeChar = writeCharacteristic {
-            writeData(data, to: writeChar, peripheral: peripheral, completion: completion)
+            writeDataInChunks(data, to: writeChar, peripheral: peripheral, completion: completion)
         } else {
-            // No active connection. Try to auto-connect to the saved printer.
             let savedName = Self.savedPrinterName
             guard !savedName.isEmpty else {
                 completion(.failure(PrinterError.notConfigured))
@@ -219,13 +272,13 @@ final class PrinterManager: NSObject, ObservableObject {
         }
         discoveredPeripherals.removeAll()
         isScanning = true
-        cm.scanForPeripherals(withServices: [Self.bleServiceUUID], options: nil)
+        cm.scanForPeripherals(withServices: nil, options: nil)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
             if self.writeCharacteristic == nil {
                 self.stopScan()
                 self.currentPrintCompletion?(.failure(PrinterError.connectionFailed(
-                    "Printer '\(name)' not found. Make sure it is turned on and in pairing mode."
+                    "Printer '\(name)' not found. Make sure it is turned on and in pairing mode. For SM58 hold power + feed."
                 )))
                 self.currentPrintCompletion = nil
                 self.pendingPrintData = nil
@@ -237,9 +290,45 @@ final class PrinterManager: NSObject, ObservableObject {
                            to characteristic: CBCharacteristic,
                            peripheral: CBPeripheral,
                            completion: @escaping (Result<Void, Error>) -> Void) {
-        // Receipt data is small; write without response is fine and immediate.
-        peripheral.writeValue(data, for: characteristic, type: .withoutResponse)
-        completion(.success(()))
+        writeDataInChunks(data, to: characteristic, peripheral: peripheral, completion: completion)
+    }
+
+    private func writeDataInChunks(_ data: Data,
+                                   to characteristic: CBCharacteristic,
+                                   peripheral: CBPeripheral,
+                                   completion: @escaping (Result<Void, Error>) -> Void,
+                                   chunkSize: Int = 64) {
+        // BLE MTU ~ 185, use small chunks + longer delay for SM58 raster (GS v 0) stability
+        // 10ms was too fast -> printer drops bytes, GS header lost -> binary printed as garbled text
+        let chunkDelay: TimeInterval = data.count > 2048 ? 0.04 : 0.03
+        // Use withResponse if available for reliability
+        let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.write) ? .withResponse : .withoutResponse
+        if data.count <= chunkSize {
+            peripheral.writeValue(data, for: characteristic, type: writeType)
+            if writeType == .withoutResponse {
+                DispatchQueue.main.asyncAfter(deadline: .now() + chunkDelay) { completion(.success(())) }
+            } else {
+                // withResponse will call delegate, but we complete optimistically after delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { completion(.success(())) }
+            }
+            return
+        }
+        var offset = 0
+        func sendNext() {
+            guard offset < data.count else {
+                // Extra flush delay for printer to finish raster
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { completion(.success(())) }
+                return
+            }
+            let end = min(offset + chunkSize, data.count)
+            let chunk = data[offset..<end]
+            peripheral.writeValue(Data(chunk), for: characteristic, type: writeType)
+            offset = end
+            DispatchQueue.main.asyncAfter(deadline: .now() + chunkDelay) {
+                sendNext()
+            }
+        }
+        sendNext()
     }
 
     // MARK: - ESC/POS bytes
@@ -279,8 +368,16 @@ extension PrinterManager: CBCentralManagerDelegate {
                         didDiscover peripheral: CBPeripheral,
                         advertisementData: [String: Any],
                         rssi RSSI: NSNumber) {
+        // Filter for SM58-relevant names to reduce noise, but keep generic thermal names
+        let name = peripheral.name ?? advertisementData["kCBAdvDataLocalName"] as? String ?? ""
+        let lower = name.lowercased()
+        let isThermal = lower.contains("m58") || lower.contains("sm58") || lower.contains("rp58") || lower.contains("thermal") || lower.contains("printer") || lower.contains("pos") || name.isEmpty
+        // Keep all if no name yet (SM58 often advertises empty local name initially)
         if !discoveredPeripherals.contains(where: { $0.identifier == peripheral.identifier }) {
-            discoveredPeripherals.append(peripheral)
+            // Add SM58-like first, but keep others for debugging
+            if isThermal || discoveredPeripherals.count < 8 {
+                discoveredPeripherals.append(peripheral)
+            }
         }
 
         // Auto-connect to the saved printer by advertised/local name.
@@ -291,6 +388,9 @@ extension PrinterManager: CBCentralManagerDelegate {
             if matches {
                 connect(to: peripheral)
             }
+        } else if lower.contains("sm58") || lower.contains("m58") {
+            // Auto-prioritize SM58 if no saved name yet
+            // Do not auto-connect without save, just surface in list
         }
     }
 
@@ -298,7 +398,8 @@ extension PrinterManager: CBCentralManagerDelegate {
                         didConnect peripheral: CBPeripheral) {
         connectedPeripheral = peripheral
         peripheral.delegate = self
-        peripheral.discoverServices([Self.bleServiceUUID])
+        // Discover all services — VSC uses 49535343, SM58 uses FFE0/FF00
+        peripheral.discoverServices(nil)
     }
 
     func centralManager(_ central: CBCentralManager,
@@ -329,8 +430,17 @@ extension PrinterManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral,
                     didDiscoverServices error: Error?) {
         guard error == nil else { return }
+        // Try specific VSC service first, then generic fallback for SM58
+        var foundSpecific = false
         for service in peripheral.services ?? [] where service.uuid == Self.bleServiceUUID {
             peripheral.discoverCharacteristics([Self.bleWriteUUID, Self.bleNotifyUUID], for: service)
+            foundSpecific = true
+        }
+        if !foundSpecific {
+            // SM58 generic: FFE0 / FF00 / 18F0 — discover all characteristics
+            for service in peripheral.services ?? [] {
+                peripheral.discoverCharacteristics(nil, for: service)
+            }
         }
     }
 
@@ -338,10 +448,22 @@ extension PrinterManager: CBPeripheralDelegate {
                     didDiscoverCharacteristicsFor service: CBService,
                     error: Error?) {
         guard error == nil else { return }
+        // Prefer specific VSC characteristic, fallback to any writable for SM58 (FFE1 etc)
         for char in service.characteristics ?? [] where char.uuid == Self.bleWriteUUID {
             writeCharacteristic = char
         }
-        stopScan()
+        if writeCharacteristic == nil {
+            // Generic SM58: first characteristic with .write or .writeWithoutResponse
+            for char in service.characteristics ?? [] {
+                if char.properties.contains(.write) || char.properties.contains(.writeWithoutResponse) {
+                    writeCharacteristic = char
+                    break
+                }
+            }
+        }
+        if writeCharacteristic != nil {
+            stopScan()
+        }
 
         // If a print was requested while reconnecting, deliver it now.
         if let data = pendingPrintData, let writeChar = writeCharacteristic {

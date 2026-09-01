@@ -28,23 +28,70 @@ struct OrderConfirmSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                header
 
-            if working {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                content
-                footer
+                if working {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // 9.7" iOS16 formSheet = ~540pt, 11" fitted = ~980pt -> adaptive
+                    adaptiveContent(width: proxy.size.width)
+                    footer
+                }
+            }
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            // Follows content: max 980 for landscape 11"/13", but respects narrow formSheet on 9.7" (540)
+            .frame(width: min(980, max(320, proxy.size.width - 16)))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .onAppear {
+                if isCartMode {
+                    formVM.resetConfirmedOrder()
+                }
             }
         }
-        .background(Color.white)
-        .frame(minWidth: 860, minHeight: 680)
-        .onAppear {
-            if isCartMode {
-                formVM.resetConfirmedOrder()
+        .background(Color.posBgLight)
+        .dismissKeyboardOnTap()
+        .posSheetPresentation()
+    }
+
+    @ViewBuilder
+    private func adaptiveContent(width: CGFloat) -> some View {
+        // iPad 9.7" formSheet ~540, fitted iOS18 ~980. Threshold 720 switches H/V
+        if width > 720 {
+            contentHStack
+        } else {
+            contentVStack
+        }
+    }
+
+    private var contentHStack: some View {
+        ScrollView {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if isCartMode { inputsBox }
+                    orderSummaryBox
+                    totalsBox
+                }
+                .frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: 12) { paymentSection }
+                    .frame(maxWidth: .infinity)
             }
+            .padding(10)
+        }
+    }
+
+    private var contentVStack: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                if isCartMode { inputsBox }
+                orderSummaryBox
+                totalsBox
+                paymentSection
+            }
+            .padding(10)
         }
     }
 
@@ -54,6 +101,16 @@ struct OrderConfirmSheet: View {
 
     private var header: some View {
         HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isCartMode ? "Confirm Order & Payment" : "Payment")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.white)
+                Text(isCartMode ? "Review your order and choose a payment method"
+                                : "Order #\(existingOrder?.orderNoValue ?? "")")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.9))
+            }
+            Spacer()
             Button {
                 dismiss()
             } label: {
@@ -65,17 +122,6 @@ struct OrderConfirmSheet: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isCartMode ? "Confirm Order & Payment" : "Payment")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.white)
-                Text(isCartMode ? "Review your order and choose a payment method"
-                                : "Order #\(existingOrder?.orderNoValue ?? "")")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.9))
-            }
-            Spacer()
         }
         .padding(14)
         .background(Color.posPrimaryGradient)
@@ -189,9 +235,20 @@ struct OrderConfirmSheet: View {
             TextField("Customer Name", text: $tab.customer)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
 
-            TextField("Discount", text: discountBinding)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .keyboardType(.numberPad)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Text("Discount (Rp)").font(.system(size: 12, weight: .semibold)).foregroundColor(.posTextSecondary)
+                    Spacer()
+                    Text(CurrencyUtils.formatRp(discountValue)).font(.system(size: 12, weight: .bold)).foregroundColor(discountValue > 0 ? .posStatusVoid : .posTextSecondary)
+                }
+                HStack(spacing: 6) {
+                    Text("Rp.").font(.system(size: 14, weight: .semibold)).foregroundColor(.posTextSecondary)
+                    TextField("0", text: discountBinding)
+                        .keyboardType(.numberPad)
+                }
+                .padding(.horizontal, 10).frame(height: 36).background(Color.white).cornerRadius(8).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.posDivider, lineWidth: 1))
+                Text("Enter discount in Rupiah, e.g. 5000").font(.system(size: 11)).foregroundColor(.posTextSecondary)
+            }
 
             TextField("Additional notes...", text: $tab.remark)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -246,9 +303,21 @@ struct OrderConfirmSheet: View {
 
             paymentSelector
 
-            if selectedPayment == 1 {
-                cashPanel
+            Group {
+                if selectedPayment == 1 {
+                    cashPanel
+                } else {
+                    Color.clear
+                        .frame(height: 230)
+                        .overlay(
+                            Text(selectedPayment == 2 ? "Scan QR Code" : "Tap card on reader")
+                                .font(.system(size: 12))
+                                .foregroundColor(.posTextSecondary)
+                        )
+                }
             }
+            .frame(height: 230)
+            .animation(.easeInOut(duration: 0.15), value: selectedPayment)
 
             if let status = statusMessage {
                 Text(status)
@@ -308,18 +377,14 @@ struct OrderConfirmSheet: View {
     }
 
     private var cashPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("CASH PAYMENT")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.posPrimary)
-
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("TOTAL")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundColor(.posTextSecondary)
                     Text(CurrencyUtils.formatRp(totalValue))
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.posTextPrimary)
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
@@ -327,10 +392,10 @@ struct OrderConfirmSheet: View {
                             Button {
                                 cashReceived += amount
                             } label: {
-                                Text(CurrencyUtils.formatRp(amount))
-                                    .font(.system(size: 13, weight: .semibold))
+                                Text(CurrencyUtils.formatRp(amount).replacingOccurrences(of: "Rp.", with: "").trimmingCharacters(in: .whitespaces))
+                                    .font(.system(size: 11, weight: .semibold))
                                     .foregroundColor(.posPrimaryDark)
-                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .frame(maxWidth: .infinity, minHeight: 36)
                                     .background(Color.white)
                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.posDivider, lineWidth: 1))
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -355,26 +420,26 @@ struct OrderConfirmSheet: View {
                 .frame(maxWidth: .infinity)
                 .frame(minWidth: 260)
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("UANG DITERIMA")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundColor(.posTextSecondary)
                     Text(CurrencyUtils.formatRp(cashReceived))
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.posTextPrimary)
 
                     Text("KEMBALIAN")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundColor(.posTextSecondary)
-                        .padding(.top, 12)
+                        .padding(.top, 8)
                     Text(CurrencyUtils.formatRp(change))
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.posAccent)
                 }
                 .frame(width: 120)
             }
         }
-        .padding(12)
+        .padding(10)
         .background(Color.posRowOdd)
         .cornerRadius(8)
     }
@@ -577,6 +642,24 @@ private struct ConfirmLineRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 5)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func posSheetPresentation() -> some View {
+        if #available(iOS 16.4, *) {
+            if #available(iOS 18.0, *) {
+                self.presentationBackground(Color.posBgLight)
+                    .presentationCornerRadius(16)
+                    .presentationSizing(.fitted)
+            } else {
+                self.presentationBackground(Color.posBgLight)
+                    .presentationCornerRadius(16)
+            }
+        } else {
+            self
+        }
     }
 }
 

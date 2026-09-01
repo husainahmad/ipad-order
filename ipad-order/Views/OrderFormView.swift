@@ -2,26 +2,47 @@ import SwiftUI
 
 struct OrderFormView: View {
     @EnvironmentObject var formVM: OrderFormViewModel
+    @EnvironmentObject var toastManager: ToastManager
     @ObservedObject var tab: OrderTab
 
     @State private var selectedProduct: Product?
     @State private var showConfirm = false
 
     private let repository = MenuRepository()
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
+    // 9.7" compact: 4 cols x ~125pt (180+320 side panels =500, product 524) -> same width/height, image 68x125 crop
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
 
     var body: some View {
-        HStack(spacing: 0) {
-            categoryColumn
-            productColumn
-            cartColumn
+        ZStack {
+            HStack(spacing: 0) {
+                categoryColumn
+                productColumn
+                cartColumn
+            }
+
+            // Product variant popup (420pt compact, ZStack overlay)
+            if let product = selectedProduct {
+                Color.black.opacity(0.45).ignoresSafeArea().transition(.opacity)
+                ProductDetailPopup(product: product) { selectedProduct = nil }
+                    .environmentObject(formVM)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(1)
+            }
+
+            // Order Confirm & Payment (920pt landscape two-column, ZStack overlay)
+            if showConfirm {
+                Color.black.opacity(0.45).ignoresSafeArea().transition(.opacity)
+                OrderConfirmPopup(tab: tab, existingOrder: nil, onSuccess: nil) {
+                    showConfirm = false
+                }
+                .environmentObject(formVM)
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                .zIndex(2)
+            }
         }
-        .sheet(item: $selectedProduct) { product in
-            ProductDetailSheet(product: product)
-        }
-        .sheet(isPresented: $showConfirm) {
-            OrderConfirmSheet(tab: tab)
-        }
+        .dismissKeyboardOnTap()
+        .animation(.easeOut(duration: 0.2), value: selectedProduct != nil)
+        .animation(.easeOut(duration: 0.2), value: showConfirm)
         .task {
             await loadCategories()
         }
@@ -79,7 +100,7 @@ struct OrderFormView: View {
         }
         .padding(12)
         .background(Color.posBgLight)
-        .frame(width: 210)
+        .frame(width: 180)
     }
 
     // MARK: - Product column (53%)
@@ -109,8 +130,15 @@ struct OrderFormView: View {
             .overlay(Rectangle().fill(Color.posDivider).frame(height: 1), alignment: .bottom)
 
             if tab.loadingProducts {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(0..<8, id: \.self) { _ in
+                            SkeletonProductCard()
+                        }
+                    }
+                    .padding(10)
+                }
+                .redacted(reason: .placeholder)
             } else if let error = tab.error, !error.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -125,14 +153,14 @@ struct OrderFormView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 14) {
+                    LazyVGrid(columns: columns, spacing: 10) {
                         ForEach(tab.products) { product in
                             ProductCard(product: product) {
                                 handleProductTap(product)
                             }
                         }
                     }
-                    .padding(14)
+                    .padding(10)
                 }
             }
         }
@@ -164,6 +192,8 @@ struct OrderFormView: View {
                         .frame(width: 26, height: 26)
                         .background(Color.white.opacity(0.25))
                         .clipShape(Circle())
+                        .animation(.spring(response: 0.35, dampingFraction: 0.65), value: totalItemCount)
+                        .transition(.scale.combined(with: .opacity))
                 }
             }
             .foregroundColor(.white)
@@ -174,18 +204,26 @@ struct OrderFormView: View {
             serviceTypeSelector
 
             if tab.items.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "cart.badge.plus")
-                        .font(.system(size: 44))
-                        .foregroundColor(.posDivider)
+                VStack(spacing: 14) {
+                    ZStack {
+                        Circle().fill(Color.posAccentSoft).frame(width: 72, height: 72)
+                        Image(systemName: "cart.badge.plus")
+                            .font(.system(size: 28))
+                            .foregroundColor(.posAccent)
+                    }
                     Text("Cart is empty")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.posTextPrimary)
-                    Text("Tap a product to start")
+                    Text("Tap a product to start ordering")
                         .font(.system(size: 13))
                         .foregroundColor(.posTextSecondary)
+                    Text("Your selected items will appear here")
+                        .font(.system(size: 11))
+                        .foregroundColor(.posTextSecondary.opacity(0.8))
+                        .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
             } else {
                 ScrollView {
                     VStack(spacing: 10) {
@@ -199,6 +237,9 @@ struct OrderFormView: View {
                                         .font(.system(size: 14, weight: .bold))
                                         .foregroundColor(.posTextPrimary)
                                     Spacer()
+                                    Text("\(group.items.reduce(0){$0+$1.quantity}) items")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.posTextSecondary)
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
@@ -206,20 +247,22 @@ struct OrderFormView: View {
 
                                 ForEach(group.items) { item in
                                     CartRow(item: item,
-                                            onDecrement: { formVM.decrement(productId: item.productId, skuId: item.skuId) },
-                                            onIncrement: { formVM.increment(productId: item.productId, skuId: item.skuId) })
+                                            onDecrement: { withAnimation(.spring(response: 0.28, dampingFraction: 0.65)) { formVM.decrement(productId: item.productId, skuId: item.skuId) }; UIImpactFeedbackGenerator(style: .light).impactOccurred() },
+                                            onIncrement: { withAnimation(.spring(response: 0.28, dampingFraction: 0.65)) { formVM.increment(productId: item.productId, skuId: item.skuId) }; UIImpactFeedbackGenerator(style: .light).impactOccurred() },
+                                            onDelete: { withAnimation(.spring(response: 0.32, dampingFraction: 0.7)) { formVM.removeItem(productId: item.productId, skuId: item.skuId) }; UIImpactFeedbackGenerator(style: .medium).impactOccurred() })
                                 }
                             }
-                            .background(Color.white)
+                            .background(Color.posRowEven)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(Color.posDivider, lineWidth: 1)
                             )
-                            .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+                            .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
                         }
                     }
                     .padding(10)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: groupedItems.count)
                 }
             }
 
@@ -233,12 +276,24 @@ struct OrderFormView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.posTextPrimary)
                 }
+                let discountVal = Double(CurrencyUtils.digitsOnly(tab.discount)) ?? 0
+                if discountVal > 0 {
+                    HStack {
+                        Text("Discount")
+                            .font(.system(size: 14))
+                            .foregroundColor(.posTextSecondary)
+                        Spacer()
+                        Text(CurrencyUtils.formatRp(discountVal))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.posStatusVoid)
+                    }
+                }
                 HStack {
                     Text("Total")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.posPrimary)
                     Spacer()
-                    Text(CurrencyUtils.formatRp(tab.subtotal))
+                    Text(CurrencyUtils.formatRp(max(0, tab.subtotal - discountVal)))
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.posPrimary)
                 }
@@ -260,7 +315,7 @@ struct OrderFormView: View {
             .overlay(Rectangle().fill(Color.posDivider).frame(height: 1), alignment: .top)
         }
         .background(Color.posBgLight)
-        .frame(width: 360)
+        .frame(width: 320)
     }
 
     private var totalItemCount: Int {
@@ -290,10 +345,10 @@ struct OrderFormView: View {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 15))
-                    .foregroundColor(selected ? .posPrimaryDark : .posGrayButton)
+                    .foregroundColor(selected ? .posAccent : .posGrayButton)
                 Text(title)
                     .font(.system(size: 14, weight: selected ? .bold : .regular))
-                    .foregroundColor(selected ? .posPrimaryDark : .posTextSecondary)
+                    .foregroundColor(selected ? .posTextPrimary : .posTextSecondary)
                 Spacer()
                 if selected {
                     Image(systemName: "checkmark.circle.fill")
@@ -339,7 +394,9 @@ struct OrderFormView: View {
                 selectCategory(first)
             }
         } catch {
-            tab.error = error.localizedDescription
+            let msg = error.localizedDescription
+            tab.error = msg
+            toastManager.show(msg, style: .error)
         }
     }
 
@@ -363,13 +420,17 @@ struct OrderFormView: View {
         do {
             tab.products = try await repository.getProducts(categoryId: categoryId)
         } catch {
-            tab.error = error.localizedDescription
+            let msg = error.localizedDescription
+            tab.error = msg
+            toastManager.show(msg, style: .error)
         }
     }
 
     private func printKitchen() {
         guard !tab.items.isEmpty else {
-            tab.error = "Cart is empty"
+            let msg = "Cart is empty"
+            tab.error = msg
+            toastManager.show(msg, style: .info)
             return
         }
         let text = buildKitchenText()
@@ -378,8 +439,11 @@ struct OrderFormView: View {
                 switch result {
                 case .success:
                     tab.error = nil
+                    toastManager.show("Kitchen ticket sent", style: .success)
                 case .failure(let printError):
-                    tab.error = "Print failed: \(printError.localizedDescription)"
+                    let msg = "Print failed: \(printError.localizedDescription)"
+                    tab.error = msg
+                    toastManager.show(msg, style: .error)
                 }
             }
         }
@@ -412,6 +476,7 @@ private struct CartRow: View {
     let item: CartItem
     let onDecrement: () -> Void
     let onIncrement: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -435,6 +500,7 @@ private struct CartRow: View {
                 .font(.system(size: 15, weight: .bold))
                 .foregroundColor(.posTextPrimary)
                 .frame(width: 30)
+                .animation(.spring(response: 0.28, dampingFraction: 0.6), value: item.quantity)
 
             Button(action: onIncrement) {
                 Image(systemName: "plus")
@@ -451,53 +517,104 @@ private struct CartRow: View {
                 .font(.system(size: 15, weight: .bold))
                 .foregroundColor(.posTextPrimary)
                 .frame(width: 90, alignment: .trailing)
+
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Color.posStatusVoid)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .background(Color.white.opacity(0.001))
+        .contextMenu {
+            Button(role: .destructive, action: onDelete) {
+                Label("Remove", systemImage: "trash")
+            }
+        }
     }
 }
 
 struct ProductCard: View {
     let product: Product
     let action: () -> Void
+    private var isSoldOut: Bool { (product.skus ?? []).isEmpty }
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 0) {
-                ProductImageThumb(product: product)
-                    .frame(height: 92)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.posSurfaceVariant)
-
-                VStack(spacing: 5) {
-                    Text(product.nameValue)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.posTextPrimary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    HStack(spacing: 4) {
-                        Text(defaultPrice)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.posAccent)
-                            .lineLimit(1)
-                        Spacer()
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.posPrimary)
+            ZStack(alignment: .topTrailing) {
+                VStack(spacing: 0) {
+                    ZStack {
+                        ProductImageThumb(product: product)
+                            .frame(height: 90)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.posSurfaceVariant)
+                        if isSoldOut {
+                            Color.black.opacity(0.42)
+                            Text("Sold Out")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Color.posStatusVoid)
+                                .clipShape(Capsule())
+                        }
                     }
+                    .frame(height: 90)
+                    .padding(.bottom, 4)
+
+                    VStack(spacing: 4) {
+                        Text(product.nameValue)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.posTextPrimary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        HStack(spacing: 4) {
+                            Text(isSoldOut ? "Unavailable" : defaultPrice)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(isSoldOut ? .posTextSecondary : .posAccent)
+                                .lineLimit(1)
+                            Spacer()
+                            // Reserve space for FAB overlap so text doesn't collide
+                            Color.clear.frame(width: 30, height: 1)
+                        }
+                    }
+                    .padding(8)
                 }
-                .padding(10)
+                .frame(height: 130)
+                .background(Color.posSurfaceContainerHigh)
+                .clipShape(RoundedRectangle(cornerRadius: PosShape.cornerLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: PosShape.cornerLarge)
+                        .stroke(Color.posOutlineVariant, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 2)
+                .opacity(isSoldOut ? 0.72 : 1)
+
+                // Floating FAB - hidden when sold out
+                if !isSoldOut {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 32, height: 32)
+                        .background(Color.posAccent)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                        .shadow(color: Color.posAccent.opacity(0.32), radius: 6, x: 0, y: 3)
+                        .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 2)
+                        .padding(.top, 74) // 90 - 16 (center on image bottom edge)
+                        .padding(.trailing, 8)
+                }
             }
-            .background(Color.posSurfaceContainerHigh)
-            .clipShape(RoundedRectangle(cornerRadius: PosShape.cornerLarge))
-            .overlay(
-                RoundedRectangle(cornerRadius: PosShape.cornerLarge)
-                    .stroke(Color.posOutlineVariant, lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 2)
+            .frame(height: 130)
+            .contentShape(RoundedRectangle(cornerRadius: PosShape.cornerLarge))
         }
         .buttonStyle(.plain)
+        .disabled(isSoldOut)
     }
 
     private var defaultPrice: String {
@@ -509,24 +626,60 @@ struct ProductCard: View {
     }
 }
 
+struct SkeletonProductCard: View {
+    @State private var shimmer = false
+    var body: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Color.posDivider.opacity(0.6))
+                .frame(height: 90)
+                .overlay(
+                    LinearGradient(colors: [Color.clear, Color.white.opacity(0.55), Color.clear], startPoint: .leading, endPoint: .trailing)
+                        .offset(x: shimmer ? 160 : -160)
+                )
+                .clipped()
+                .padding(.bottom, 4)
+            VStack(alignment: .leading, spacing: 8) {
+                RoundedRectangle(cornerRadius: 4).fill(Color.posDivider.opacity(0.7)).frame(height: 10).frame(maxWidth: .infinity)
+                RoundedRectangle(cornerRadius: 4).fill(Color.posDivider.opacity(0.5)).frame(width: 60, height: 10)
+            }
+            .padding(8)
+        }
+        .frame(height: 130)
+        .background(Color.posSurfaceContainerHigh)
+        .clipShape(RoundedRectangle(cornerRadius: PosShape.cornerLarge))
+        .overlay(RoundedRectangle(cornerRadius: PosShape.cornerLarge).stroke(Color.posOutlineVariant.opacity(0.5), lineWidth: 1))
+        .onAppear { withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) { shimmer.toggle() } }
+    }
+}
+
 struct ProductImageThumb: View {
     let product: Product
 
     var body: some View {
-        if let uiImage = ProductImageCache.image(for: product) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-        } else {
-            ZStack {
+        GeometryReader { geo in
+            ZStack(alignment: .center) {
                 Color.posSurfaceVariant
-                Image(systemName: "cup.and.saucer")
-                    .font(.system(size: 34))
-                    .foregroundColor(Color.posAccent.opacity(0.4))
+                if let uiImage = ProductImageCache.image(for: product) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                } else {
+                    Image(systemName: "cup.and.saucer")
+                        .font(.system(size: 30))
+                        .foregroundColor(Color.posAccent.opacity(0.4))
+                }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
+        .frame(height: 90)
+        .frame(maxWidth: .infinity)
+        .background(Color.posSurfaceVariant)
+        .clipped()
+        .contentShape(Rectangle())
     }
 }
 

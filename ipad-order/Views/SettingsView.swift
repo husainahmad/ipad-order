@@ -4,6 +4,7 @@ import CoreBluetooth
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var session: AppSession
+    @EnvironmentObject var themeManager: ThemeManager
 
     @State private var serverHost = ConfigManager.host
     @State private var serverPort = String(ConfigManager.port)
@@ -15,6 +16,12 @@ struct SettingsView: View {
     @State private var printerStatus = ""
 
     @ObservedObject private var printerManager = PrinterManager.shared
+    private let receiptLanguages: [(code: String, name: String, flag: String)] = [
+        ("system", "System", "⚙️"), ("id", "Indonesia", "🇮🇩"), ("en", "English", "🇬🇧"),
+        ("ar", "العربية", "🇸🇦"), ("ja", "日本語", "🇯🇵"), ("ko", "한국어", "🇰🇷"),
+        ("zh-Hans", "中文", "🇨🇳"), ("fr", "Français", "🇫🇷"), ("de", "Deutsch", "🇩🇪"), ("es", "Español", "🇪🇸"),
+        ("jv", "Jawa", "🇮🇩"), ("su", "Sunda", "🇮🇩"), ("ban", "Bali", "🇮🇩"), ("min", "Minang", "🇮🇩"), ("bug", "Bugis", "🇮🇩"), ("mad", "Madura", "🇮🇩")
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +29,10 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     userInfo
+
+                    themeCard
+
+                    receiptLanguageCard
 
                     serverCard
                     printerCard
@@ -41,6 +52,7 @@ struct SettingsView: View {
             }
         }
         .background(Color.posBgLight)
+        .dismissKeyboardOnTap()
     }
 
     private var header: some View {
@@ -57,16 +69,12 @@ struct SettingsView: View {
             Button {
                 dismiss()
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.left")
-                    Text("Back")
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.15))
-                .clipShape(Capsule())
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.15))
+                    .clipShape(Circle())
             }
             .buttonStyle(.plain)
         }
@@ -97,6 +105,118 @@ struct SettingsView: View {
                     .foregroundColor(.posTextSecondary)
             }
             Spacer()
+        }
+        .posCard()
+    }
+
+    private var themeCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "paintbrush.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.posPrimary)
+                Text("Appearance")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.posPrimary)
+                Spacer()
+                Image(systemName: themeManager.theme.icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.posAccent)
+                Text(themeManager.theme.displayName)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.posAccent)
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                ForEach(AppTheme.allCases) { mode in
+                    Button {
+                        themeManager.theme = mode
+                    } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: mode.icon)
+                                .font(.system(size: 18))
+                                .foregroundColor(themeManager.theme == mode ? .white : .posTextSecondary)
+                            Text(mode.displayName)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(themeManager.theme == mode ? .white : .posTextPrimary)
+                            if mode == .cafe {
+                                Text(mode.description)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(themeManager.theme == mode ? .white.opacity(0.85) : .posTextSecondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                        .background(themeManager.theme == mode ? AnyShapeStyle(Color.posPrimaryGradient) : AnyShapeStyle(Color.posBgLight))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(themeManager.theme == mode ? Color.clear : Color.posDivider, lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .shadow(color: themeManager.theme == mode ? Color.posPrimary.opacity(0.25) : Color.clear, radius: 6, x: 0, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 12))
+                Text("Café: Warm Harmoni palette for Coffee & Restaurant POS. Light is default.")
+                    .font(.system(size: 12))
+            }
+            .foregroundColor(.posTextSecondary)
+        }
+        .posCard()
+    }
+
+    @State private var lastRandomLang: String = PrintUtils.receiptLanguages.randomElement() ?? "id"
+    private var receiptLanguageCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "printer.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.posPrimary)
+                Text("Receipt — SM58 Auto")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.posPrimary)
+                Spacer()
+                Text("IMAGE")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Color.posAccent)
+                    .clipShape(Capsule())
+            }
+
+            Text("Each receipt is rendered on iPad as image (384 dots) with iPad fonts — JP/CN/KR/AR + Indonesian locals — then sent as GS v 0 raster. SM58 prints image even without Unicode firmware. Latin also as image to avoid printer font fallback.")
+                .font(.system(size: 12))
+                .foregroundColor(.posTextSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                Button("Test Receipt (Random)") {
+                    let sample = Order(id: 999, orderNo: "TEST-001", customerName: "Test", remark: "", status: "PAID", storeServiceTypesId: 1, subTotal: 20000, discountTotal: 0, grandTotal: 20000, createdAt: "", orderPayment: nil, orderDetails: nil)
+                    let text = PrintUtils.buildReceiptText(sample)
+                    print(text)
+                    PrinterManager.print(text) { result in
+                        switch result {
+                        case .success: print("Random image receipt print success")
+                        case .failure(let e): print("Random receipt print failed: \(e.localizedDescription)")
+                        }
+                    }
+                }
+                .buttonStyle(PosButtonStyle(filled: true))
+                Button("Test Unicode (JP/CN/KR/AR)") {
+                    PrinterManager.printUnicodeTest { result in
+                        print(result)
+                    }
+                }
+                .buttonStyle(PosButtonStyle(filled: false, outlineColor: .posPrimary))
+            }
+
+            Label("Fonts from iPad (Hiragino/PingFang/Apple SD/Geeza) — to bundle custom Noto fonts add .ttf to Fonts/ and register in Info.plist UIAppFonts; renderer will fallback automatically.", systemImage: "info.circle")
+                .font(.system(size: 11))
+                .foregroundColor(.posTextSecondary)
         }
         .posCard()
     }
@@ -282,13 +402,18 @@ struct SettingsView: View {
             .buttonStyle(PosButtonStyle(filled: false, outlineColor: .posBlueAction))
         }
 
+        Button("Test Unicode (58mm) — JP/CN/KR/AR") {
+            testUnicode()
+        }
+        .buttonStyle(PosButtonStyle(filled: false, outlineColor: .posPrimary))
+
         if !printerStatus.isEmpty {
             Text(printerStatus)
                 .font(.system(size: 13))
                 .foregroundColor(.posStatusPaid)
         }
 
-        Label("Bluetooth mode works with ESC/POS thermal printers that expose a BLE service (e.g. VSC TM-58D PRO).",
+        Label("Bluetooth mode works with ESC/POS thermal printers that expose a BLE service (e.g. VSC TM-58D PRO). SM58 prints Unicode via iPad raster (GS v 0).",
               systemImage: "info.circle")
             .font(.system(size: 12))
             .foregroundColor(.posTextSecondary)
@@ -332,13 +457,18 @@ struct SettingsView: View {
             .buttonStyle(PosButtonStyle(filled: false, outlineColor: .posBlueAction))
         }
 
+        Button("Test Unicode (58mm) — JP/CN/KR/AR") {
+            testUnicode()
+        }
+        .buttonStyle(PosButtonStyle(filled: false, outlineColor: .posPrimary))
+
         if !printerStatus.isEmpty {
             Text(printerStatus)
                 .font(.system(size: 13))
                 .foregroundColor(.posStatusPaid)
         }
 
-        Label("On iPad, only network (TCP/IP) ESC/POS thermal printers are supported.",
+        Label("On iPad, only network (TCP/IP) ESC/POS thermal printers are supported. Unicode via hybrid raster works for 58mm SM58.",
               systemImage: "info.circle")
             .font(.system(size: 12))
             .foregroundColor(.posTextSecondary)
@@ -419,6 +549,21 @@ struct SettingsView: View {
                     printerStatus = "Print sent successfully"
                 case .failure(let error):
                     printerStatus = "Print failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func testUnicode() {
+        savePrinter()
+        printerStatus = "Printing Unicode test..."
+        PrinterManager.printUnicodeTest { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    printerStatus = "Unicode test sent (58mm raster for JP/CN/KR/AR)"
+                case .failure(let error):
+                    printerStatus = "Unicode print failed: \(error.localizedDescription)"
                 }
             }
         }

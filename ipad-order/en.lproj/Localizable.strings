@@ -1,0 +1,10 @@
+/* Receipt - English */
+"receipt.thank_you" = "Thank you";
+"receipt.see_you" = "See you again!";
+
+/* Receipt header (optional) */
+"receipt.header" = "KOPI HARMONI";
+
+/* Settings */
+"settings.receiptLanguage" = "Receipt Language";
+"settings.receiptLanguage.system" = "System";
