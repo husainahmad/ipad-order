@@ -1,5 +1,9 @@
 import SwiftUI
 
+// MARK: - OrdersView — iPad Scannability Redesign
+// Principles: Reduce 7 cols → 6, increase hierarchy, left status accent, right-aligned money,
+// 68pt touch row, sticky header, filter chips + search, empty/loading skeletons.
+
 struct OrdersView: View {
     @EnvironmentObject var ordersVM: OrdersViewModel
     @EnvironmentObject var session: AppSession
@@ -11,39 +15,87 @@ struct OrdersView: View {
     @State private var showSettlement = false
     @State private var settlement: Settlement?
 
-    private let columns: [(String, CGFloat)] = [
-        ("Order No", 2.0),
-        ("Date", 1.0),
-        ("Customer", 1.2),
-        ("Payment", 0.7),
-        ("Status", 0.8),
-        ("Sub Total", 0.9),
-        ("Discount", 0.8),
-        ("Total", 1.0),
-        ("Type", 0.8),
+    @State private var searchText = ""
+    @State private var selectedFilter: OrderFilter = .all
+    @FocusState private var searchFocused: Bool
+
+    // Scannability: search + filter
+    enum OrderFilter: String, CaseIterable, Identifiable {
+        case all = "All"
+        case paid = "Paid"
+        case confirmed = "Confirmed"
+        case void = "Void"
+        var id: String { rawValue }
+        var icon: String {
+            switch self {
+            case .all: return "list.bullet"
+            case .paid: return "checkmark.circle.fill"
+            case .confirmed: return "clock.fill"
+            case .void: return "xmark.circle.fill"
+            }
+        }
+        var color: Color {
+            switch self {
+            case .all: return .posPrimary
+            case .paid: return .posStatusPaid
+            case .confirmed: return .posStatusConfirmed
+            case .void: return .posStatusVoid
+            }
+        }
+        func matches(_ order: Order) -> Bool {
+            switch self {
+            case .all: return true
+            case .paid: return order.isPaid
+            case .confirmed: return order.isConfirmed
+            case .void: return order.isVoid
+            }
+        }
+    }
+
+    // 6 cols optimized for iPad scan: Order(identity) | Customer | Payment | Status | Amount | Type
+    private let columns: [(title: String, weight: CGFloat, alignment: Alignment)] = [
+        ("Order", 2.2, .leading),
+        ("Customer", 1.4, .leading),
+        ("Payment", 0.8, .leading),
+        ("Status", 0.9, .leading),
+        ("Amount", 1.1, .trailing),
+        ("Type", 0.8, .leading),
     ]
+
+    private var filteredOrders: [Order] {
+        ordersVM.orders.filter { order in
+            guard selectedFilter.matches(order) else { return false }
+            if searchText.isEmpty { return true }
+            let q = searchText.lowercased()
+            return order.orderNoValue.lowercased().contains(q)
+                || order.customerNameValue.lowercased().contains(q)
+                || order.paymentName.lowercased().contains(q)
+        }
+    }
+
+    private var todaysTotal: Double {
+        filteredOrders.filter { !$0.isVoid }.reduce(0) { $0 + $1.grandTotalValue }
+    }
 
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
                 ordersHeader
-                headerRow(width: geo.size.width)
-                if ordersVM.loading {
-                    ProgressView()
-                        .padding()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let error = ordersVM.error, !error.isEmpty, ordersVM.orders.isEmpty {
-                    VStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.posStatusVoid)
-                        Text(error)
-                            .foregroundColor(.posStatusVoid)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    orderList(width: geo.size.width)
+                OrderFilterBar(selectedFilter: $selectedFilter, orders: ordersVM.orders) {
+                    searchText = ""
                 }
+                columnHeader(width: geo.size.width)
+                OrderListContent(
+                    isLoading: ordersVM.loading && ordersVM.orders.isEmpty,
+                    error: ordersVM.error,
+                    orders: filteredOrders,
+                    searchText: searchText,
+                    filterActive: selectedFilter != .all || !searchText.isEmpty,
+                    width: geo.size.width,
+                    onRetry: { Task { await ordersVM.loadOrders() } },
+                    onSelect: { selectedOrder = $0 },
+                    onClearFilters: { selectedFilter = .all; searchText = "" }
+                )
                 footerButtons
             }
             .background(Color.posBgLight)
@@ -51,324 +103,150 @@ struct OrdersView: View {
         .sheet(item: $selectedOrder) { order in
             OrderDetailSheet(order: order)
         }
-        .sheet(isPresented: $showSalesReport) {
-            SalesReportView()
-        }
-        .sheet(isPresented: $showDailyReport) {
-            DailyReportView()
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-        }
+        .sheet(isPresented: $showSalesReport) { SalesReportView() }
+        .sheet(isPresented: $showDailyReport) { DailyReportView() }
+        .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showSettlement) {
-            if let settlement = settlement {
-                SettlementSheet(settlement: settlement)
-            }
+            if let s = settlement { SettlementSheet(settlement: s) }
         }
-        .onAppear {
-            Task { await ordersVM.loadOrders() }
-        }
+        .onAppear { Task { await ordersVM.loadOrders() } }
+        .dismissKeyboardOnTap()
     }
 
+    // MARK: - Header (brand + summary + search)
+
     private var ordersHeader: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "list.bullet.rectangle.fill")
-                .font(.system(size: 16))
-                .foregroundColor(.white.opacity(0.9))
-            Text("Orders")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.white)
+        HStack(spacing: 14) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.white.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "list.bullet.rectangle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.white)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Orders")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("\(filteredOrders.count) shown • \(CurrencyUtils.formatRp(todaysTotal)) takings")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(1)
+                }
+            }
             Spacer()
-            Text("\(ordersVM.orders.count) orders")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.white.opacity(0.85))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.15))
-                .clipShape(Capsule())
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(searchFocused ? .posPrimary : .white.opacity(0.85))
+                TextField("Search order, customer", text: $searchText)
+                    .font(.system(size: 14))
+                    .foregroundColor(.posTextPrimary)
+                    .tint(.posPrimary)
+                    .focused($searchFocused)
+                    .submitLabel(.search)
+                if !searchText.isEmpty {
+                    Button { searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.posTextSecondary)
+                    }.buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(width: 300, height: 36)
+            .background(Color.posRowEven.opacity(searchFocused ? 1 : 0.14))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posOutlineVariant.opacity(searchFocused ? 0.8 : 0.3), lineWidth: 1))
+            .animation(.easeInOut(duration: 0.15), value: searchFocused)
         }
         .padding(.horizontal, 16)
-        .frame(height: 52)
+        .frame(height: 56)
         .background(Color.posPrimaryGradient)
     }
 
-    private func headerRow(width: CGFloat) -> some View {
+    // MARK: - Sticky column header
+
+    private func columnHeader(width: CGFloat) -> some View {
         HStack(spacing: 0) {
-            ForEach(columns, id: \.0) { column in
-                Text(column.0)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.posTextPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(width: relativeWidth(column.1, of: width))
+            Color.clear.frame(width: 4)
+            ForEach(columns, id: \.title) { col in
+                Text(col.title.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.4)
+                    .foregroundColor(.posTextSecondary)
+                    .frame(maxWidth: .infinity, alignment: col.alignment)
+                    .frame(width: rel(col.weight, width: width))
             }
+            Color.clear.frame(width: 24)
         }
         .padding(.horizontal, 8)
-        .frame(height: 46)
-        .background(Color.posSurfaceContainer)
+        .frame(height: 36)
+        .background(Color.posSurfaceContainerHigh)
         .overlay(Rectangle().fill(Color.posDivider).frame(height: 1), alignment: .bottom)
-        .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
     }
 
-    private func orderList(width: CGFloat) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(ordersVM.orders.enumerated()), id: \.element.id) { index, order in
-                    Button {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        selectedOrder = order
-                    } label: {
-                        OrderRow(order: order, isEven: index % 2 == 0, width: width)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .refreshable {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            await ordersVM.loadOrders()
-        }
-    }
+    // MARK: - Footer
 
     private var footerButtons: some View {
-        HStack(spacing: 10) {
-            footerButton("Daily Report", icon: "calendar") { showDailyReport = true }
-            footerButton("Sales Report", icon: "chart.bar.fill") { showSalesReport = true }
-            footerButton("Settlement", icon: "banknote") { loadSettlement() }
-            footerButton("Refresh", icon: "arrow.clockwise") {
+        HStack(spacing: 8) {
+            footerButton("Daily Report", icon: "calendar", color: .posPrimary) { showDailyReport = true }
+            footerButton("Sales Report", icon: "chart.bar.fill", color: .posPrimary) { showSalesReport = true }
+            footerButton("Settlement", icon: "banknote.fill", color: .posPrimary) { loadSettlement() }
+            Divider().frame(height: 28).opacity(0.4)
+            footerButton("Refresh", icon: "arrow.clockwise", color: .posTextPrimary, filled: false) {
                 Task { await ordersVM.loadOrders() }
             }
-            footerButton("Settings", icon: "gearshape.fill") { showSettings = true }
-            footerButton("Logout", icon: "rectangle.portrait.and.arrow.right", destructive: true) { session.logOut() }
+            footerButton("Settings", icon: "gearshape.fill", color: .posTextPrimary, filled: false) { showSettings = true }
+            Spacer().frame(width: 4)
+            Button { session.logOut() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right").font(.system(size: 13, weight: .bold))
+                    Text("Logout").font(.system(size: 13, weight: .bold))
+                }
+                .foregroundColor(.posStatusVoid)
+                .frame(height: 44).padding(.horizontal, 16)
+                .background(Color.posStatusVoid.opacity(0.08))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posStatusVoid.opacity(0.25), lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }.buttonStyle(.plain)
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .frame(height: 64)
         .background(Color.posSurfaceContainerHigh)
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: -2)
+        .overlay(Rectangle().fill(Color.posDivider).frame(height: 1), alignment: .top)
+        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: -2)
     }
 
-    private func footerButton(_ title: String, icon: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {
+    private func footerButton(_ title: String, icon: String, color: Color, filled: Bool = true, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(destructive ? .posStatusVoid : .posPrimary)
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(destructive ? .posStatusVoid : .posTextPrimary)
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundColor(filled ? .white : color)
+                Text(title).font(.system(size: 12, weight: .semibold)).foregroundColor(filled ? .white : .posTextPrimary).lineLimit(1)
             }
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .background(destructive ? Color.posStatusVoid.opacity(0.06) : Color.posBgLight)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(destructive ? Color.posStatusVoid.opacity(0.35) : Color.posDivider, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
+            .padding(.horizontal, 12).frame(height: 44)
+            .background(filled ? AnyShapeStyle(Color.posPrimaryGradient) : AnyShapeStyle(Color.posRowEven))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(filled ? Color.clear : Color.posDivider, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .shadow(color: filled ? Color.black.opacity(0.12) : Color.clear, radius: 4, x: 0, y: 2)
+        }.buttonStyle(.plain)
     }
 
-    private func relativeWidth(_ weight: CGFloat, of width: CGFloat) -> CGFloat {
-        let total = columns.reduce(0) { $0 + $1.1 }
-        return weight / total * width
+    private func rel(_ weight: CGFloat, width: CGFloat) -> CGFloat {
+        let available = max(0, width - 40)
+        let total: CGFloat = 2.2+1.4+0.8+0.9+1.1+0.8
+        return weight / total * available
     }
 
     private func loadSettlement() {
         Task {
-            if let settlement = await ordersVM.loadSettlement() {
-                PrinterManager.print(PrintUtils.buildSettlementPrintText(settlement)) { _ in }
+            if let s = await ordersVM.loadSettlement() {
+                settlement = s; showSettlement = true
+                PrinterManager.print(PrintUtils.buildSettlementPrintText(s)) { _ in }
             }
         }
-    }
-}
-
-private struct OrderRow: View {
-    let order: Order
-    let isEven: Bool
-    let width: CGFloat
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Text(order.orderNoValue)
-                .fontWeight(.semibold)
-                .foregroundColor(isEven ? .posTextPrimary : .posPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(2.0))
-            Text(TimeUtils.toJakarta(order.createdAtValue))
-                .foregroundColor(.posTextPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(1.0))
-            Text(order.customerNameValue.isEmpty ? "-" : order.customerNameValue)
-                .foregroundColor(.posTextPrimary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(1.2))
-            Text(order.paymentName)
-                .foregroundColor(.posTextPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(0.7))
-            Text(order.statusValue)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(statusColor)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(statusColor.opacity(0.12))
-                .clipShape(Capsule())
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(0.8))
-            Text(CurrencyUtils.formatRp(order.subTotalValue))
-                .foregroundColor(.posTextPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(0.9))
-            Text(CurrencyUtils.formatRp(order.discountTotalValue))
-                .foregroundColor(.posStatusVoid)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(0.8))
-            Text(CurrencyUtils.formatRp(order.grandTotalValue))
-                .fontWeight(.bold)
-                .foregroundColor(.posPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(1.0))
-            Text(order.storeServiceName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(serviceColor)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(serviceColor.opacity(0.12))
-                .clipShape(Capsule())
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(width: rel(0.8))
-        }
-        .font(.system(size: 13))
-        .foregroundColor(.posTextPrimary)
-        .padding(.horizontal, 8)
-        .frame(height: 56)
-        .background(isEven ? Color.posRowEven : Color.posRowOdd)
-    }
-
-    private var serviceColor: Color {
-        order.storeServiceTypesId == 3 ? .posStatusConfirmed : .posPrimary
-    }
-
-    private var statusColor: Color {
-        if order.isPaid { return .posStatusPaid }
-        if order.isVoid { return .posStatusVoid }
-        return .posStatusConfirmed
-    }
-
-    private func rel(_ weight: CGFloat) -> CGFloat {
-        weight / 9.2 * width
-    }
-}
-
-struct SettlementSheet: View {
-    @Environment(\.dismiss) var dismiss
-    let settlement: Settlement
-
-    @State private var printStatus: String?
-
-    var body: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: "banknote.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(.posPrimary)
-                Text("Settlement")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.posTextPrimary)
-                Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.posTextSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(Color.posBgLight)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 10) {
-                    Image(systemName: "doc.text")
-                        .font(.system(size: 13))
-                        .foregroundColor(.posPrimary)
-                    Text("Preview")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.posPrimary)
-                    Spacer()
-                }
-                .padding(12)
-                .background(Color.posAccentSoft)
-
-                ScrollView {
-                    Text(PrintUtils.buildSettlementDialogText(settlement))
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(.posTextPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                }
-            }
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.posDivider, lineWidth: 1))
-            .frame(maxHeight: .infinity)
-
-            if let status = printStatus {
-                Text(status)
-                    .font(.system(size: 13))
-                    .foregroundColor(.posTextSecondary)
-            }
-
-            HStack(spacing: 8) {
-                Button("Print") {
-                    printSettlement()
-                }
-                .buttonStyle(PosButtonStyle(filled: true))
-
-                Button("Close") {
-                    dismiss()
-                }
-                .buttonStyle(PosButtonStyle(filled: false))
-            }
-        }
-        .padding(16)
-        .background(Color.posBgLight)
-        .frame(minWidth: 560, minHeight: 440)
-    }
-
-    private func printSettlement() {
-        printStatus = "Printing..."
-        PrinterManager.print(PrintUtils.buildSettlementPrintText(settlement)) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success:
-                    printStatus = "Print sent to printer"
-                case .failure(let error):
-                    printStatus = "Print failed: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-}
-
-struct PosButtonStyle: ButtonStyle {
-    let filled: Bool
-    var outlineColor: Color = .posGrayButton
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundColor(filled ? .white : .posTextPrimary)
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .background(filled ? AnyShapeStyle(Color.posAccentGradient) : AnyShapeStyle(Color.posSurfaceContainerHigh))
-            .overlay(
-                RoundedRectangle(cornerRadius: PosShape.cornerMedium)
-                    .stroke(filled ? Color.clear : outlineColor, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: PosShape.cornerMedium))
-            .shadow(color: filled ? Color.posAccent.opacity(0.3) : Color.clear, radius: 6, x: 0, y: 2)
-            .opacity(configuration.isPressed ? 0.8 : 1)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

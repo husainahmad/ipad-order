@@ -42,7 +42,7 @@ struct OrderConfirmPopup: View {
                         }
                         .padding(12)
                     }
-                    .background(Color.white)
+                    .background(Color.posSurface)
                     footer
                 }
                 .disabled(working)
@@ -51,12 +51,12 @@ struct OrderConfirmPopup: View {
 
                 if working {
                     ZStack {
-                        Color.white.opacity(0.82)
+                        Color.posSurface.opacity(0.82)
                         VStack(spacing: 14) {
                             ProgressView()
                                 .scaleEffect(1.4)
                                 .tint(.posAccent)
-                            Text(isCartMode ? "Confirming & paying..." : "Processing payment...")
+                            Text("Processing payment...")
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(.posTextPrimary)
                             Text("Please wait")
@@ -64,7 +64,7 @@ struct OrderConfirmPopup: View {
                                 .foregroundColor(.posTextSecondary)
                         }
                         .padding(24)
-                        .background(Color.white)
+                        .background(Color.posSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                         .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 4)
                         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.posDivider, lineWidth: 1))
@@ -74,14 +74,12 @@ struct OrderConfirmPopup: View {
             }
         }
         .frame(width: min(920, UIScreen.main.bounds.width - 32))
-        .frame(maxHeight: min(680, UIScreen.main.bounds.height * 0.86))
-        .fixedSize(horizontal: false, vertical: true)
-        .background(Color.white)
+        .frame(height: min(680, UIScreen.main.bounds.height * 0.86))
+        .background(Color.posSurface)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: Color.black.opacity(0.18), radius: 24, x: 0, y: 10)
         .animation(.easeInOut(duration: 0.2), value: working)
         .dismissKeyboardOnTap()
-        .onAppear { if isCartMode { formVM.resetConfirmedOrder() } }
     }
 
     private var header: some View {
@@ -137,43 +135,109 @@ struct OrderConfirmPopup: View {
     private var inputsBox: some View {
         VStack(spacing: 12) {
             Text("Order Details").font(.system(size: 16, weight: .bold)).foregroundColor(.posPrimary).frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 8) {
-                confirmTypeCard(title: "DINE IN", icon: "fork.knife", id: 1)
-                confirmTypeCard(title: "TAKE AWAY", icon: "takeoutbag.and.cup.and.straw", id: 3)
+            // 4: Service type cart-primary — read-only badge here, edit in cart
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "fork.knife").font(.system(size: 11)).foregroundColor(.posTextSecondary)
+                    Text("Service").font(.system(size: 12, weight: .semibold)).foregroundColor(.posTextSecondary)
+                    Spacer()
+                    Button { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onClose() } label: {
+                        HStack(spacing: 4) { Image(systemName: "pencil").font(.system(size: 11, weight: .semibold)); Text("Edit in cart").font(.system(size: 11, weight: .semibold)) }.foregroundColor(.posPrimary)
+                    }.buttonStyle(.plain)
+                }
+                HStack(spacing: 8) {
+                    Image(systemName: tab.storeServiceTypesId == 3 ? "takeoutbag.and.cup.and.straw" : "fork.knife").font(.system(size: 13)).foregroundColor(tab.storeServiceTypesId == 3 ? .posStatusConfirmed : .posPrimary)
+                    Text(tab.storeServiceTypesId == 3 ? "TAKE AWAY" : "DINE IN").font(.system(size: 13, weight: .bold)).foregroundColor(.posTextPrimary)
+                    Spacer()
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 13)).foregroundColor(.posAccent)
+                }
+                .padding(.horizontal, 12).frame(height: 44)
+                .background(Color.posAccentSoft)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posAccent.opacity(0.6), lineWidth: 1.5))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            TextField("Customer Name", text: $tab.customer)
-                .foregroundColor(.posTextPrimary)
-                .tint(.posAccent)
+            // 1: Customer inline primary — read-only preview here
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.fill").font(.system(size: 11)).foregroundColor(.posTextSecondary)
+                    Text("Customer").font(.system(size: 12, weight: .semibold)).foregroundColor(.posTextSecondary)
+                    Spacer()
+                    Button { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onClose() } label: {
+                        HStack(spacing: 4) { Image(systemName: "pencil").font(.system(size: 11, weight: .semibold)); Text("Edit in cart").font(.system(size: 11, weight: .semibold)) }.foregroundColor(.posPrimary)
+                    }.buttonStyle(.plain)
+                }
+                HStack(spacing: 8) {
+                    Image(systemName: "person.fill").font(.system(size: 13)).foregroundColor(tab.customer.isEmpty ? .posTextSecondary.opacity(0.6) : .posPrimary)
+                    Text(tab.customer.isEmpty ? "Walk-in" : tab.customer)
+                        .font(.system(size: 13, weight: tab.customer.isEmpty ? .regular : .semibold))
+                        .foregroundColor(tab.customer.isEmpty ? .posTextSecondary.opacity(0.7) : .posTextPrimary)
+                        .lineLimit(1)
+                    Spacer()
+                }
                 .padding(.horizontal, 12).frame(height: 44)
                 .background(Color.posRowEven)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posOutlineVariant, lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            // 8: Discount inline primary — read-only preview here
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 4) {
-                    Text("Discount (Rp)").font(.system(size: 12, weight: .semibold)).foregroundColor(.posTextSecondary)
+                HStack(spacing: 6) {
+                    Image(systemName: "tag.fill").font(.system(size: 11)).foregroundColor(.posTextSecondary)
+                    Text("Discount").font(.system(size: 12, weight: .semibold)).foregroundColor(.posTextSecondary)
                     Spacer()
-                    Text(CurrencyUtils.formatRp(discountValue)).font(.system(size: 12, weight: .bold)).foregroundColor(discountValue > 0 ? .posStatusVoid : .posTextSecondary)
+                    Button { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onClose() } label: {
+                        HStack(spacing: 4) { Image(systemName: "pencil").font(.system(size: 11, weight: .semibold)); Text("Edit in cart").font(.system(size: 11, weight: .semibold)) }.foregroundColor(.posPrimary)
+                    }.buttonStyle(.plain)
                 }
                 HStack(spacing: 8) {
                     Text("Rp.").font(.system(size: 14, weight: .semibold)).foregroundColor(.posTextSecondary)
-                    TextField("0", text: discountBinding)
-                        .foregroundColor(.posTextPrimary)
-                        .tint(.posAccent)
-                        .keyboardType(.numberPad)
+                    Text(discountValue > 0 ? CurrencyUtils.formatRp(discountValue).replacingOccurrences(of: "Rp.", with: "") : "0")
+                        .font(.system(size: 13, weight: .bold)).foregroundColor(discountValue > 0 ? .posStatusVoid : .posTextSecondary)
+                    Spacer()
                 }
                 .padding(.horizontal, 12).frame(height: 44)
                 .background(Color.posRowEven)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posOutlineVariant, lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-                Text("Enter discount in Rupiah, e.g. 5000").font(.system(size: 11)).foregroundColor(.posTextSecondary)
+                if discountValue > 0 {
+                    Text("Discount applied from cart").font(.system(size: 11)).foregroundColor(.posStatusVoid)
+                }
             }
-            TextField("Additional notes...", text: $tab.remark)
-                .foregroundColor(.posTextPrimary)
-                .tint(.posAccent)
-                .padding(.horizontal, 12).frame(height: 44)
+            // Remark now primary in cart rail (OrderFormView:269) — show read-only preview here
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 11))
+                        .foregroundColor(.posTextSecondary)
+                    Text("Note").font(.system(size: 12, weight: .semibold)).foregroundColor(.posTextSecondary)
+                    Spacer()
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        onClose()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "pencil").font(.system(size: 11, weight: .semibold))
+                            Text("Edit in cart").font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(.posPrimary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Edit note in cart")
+                }
+                HStack(alignment: .top, spacing: 8) {
+                    Text(tab.remark.isEmpty ? "No notes" : tab.remark)
+                        .font(.system(size: 13, weight: tab.remark.isEmpty ? .regular : .medium))
+                        .foregroundColor(tab.remark.isEmpty ? .posTextSecondary.opacity(0.7) : .posTextPrimary)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44, alignment: .leading)
                 .background(Color.posRowEven)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posOutlineVariant, lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+                Text("Add or edit notes from the cart before confirming").font(.system(size: 11)).foregroundColor(.posTextSecondary)
+            }
         }.padding(16).background(Color.posBgLight).cornerRadius(8)
     }
 
@@ -226,7 +290,7 @@ struct OrderConfirmPopup: View {
                 Text(title).font(.system(size: 13, weight: selected ? .bold : .regular)).foregroundColor(selected ? .posPrimaryDark : .posTextSecondary)
                 if selected { Image(systemName: "checkmark.circle.fill").font(.system(size: 14)).foregroundColor(.posAccent) }
             }.frame(maxWidth: .infinity).padding(.vertical, 14)
-                .background(selected ? Color.white : Color.posBgLight)
+                .background(selected ? Color.posRowEven : Color.posBgLight)
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? Color.posAccent : Color.posDivider, lineWidth: selected ? 2 : 1))
                 .clipShape(RoundedRectangle(cornerRadius: 12)).shadow(color: selected ? Color.posAccent.opacity(0.2) : Color.clear, radius: 6, x: 0, y: 2)
         }.buttonStyle(.plain)
@@ -236,16 +300,14 @@ struct OrderConfirmPopup: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("TOTAL").font(.system(size: 11)).foregroundColor(.posTextSecondary)
-                    Text(CurrencyUtils.formatRp(totalValue)).font(.system(size: 16, weight: .bold)).foregroundColor(.posTextPrimary)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                         ForEach(denominations, id: \.self) { amount in
-                            Button { cashReceived += amount } label: {
+                            Button { cashReceived += amount; UIImpactFeedbackGenerator(style: .light).impactOccurred() } label: {
                                 Text(CurrencyUtils.formatRp(amount).replacingOccurrences(of: "Rp.", with: "").trimmingCharacters(in: .whitespaces))
-                                    .font(.system(size: 11, weight: .semibold)).foregroundColor(.posPrimaryDark)
-                                    .frame(maxWidth: .infinity, minHeight: 36).background(Color.white)
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.posDivider, lineWidth: 1)).clipShape(RoundedRectangle(cornerRadius: 8))
-                                    .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+                                    .font(.system(size: 13, weight: .bold)).foregroundColor(.posTextPrimary)
+                                    .frame(maxWidth: .infinity, minHeight: 44).background(Color.posRowEven)
+                                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posDivider, lineWidth: 1)).clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .shadow(color: Color.black.opacity(0.04), radius: 3, x: 0, y: 1)
                             }.buttonStyle(.plain)
                         }
                     }
@@ -253,6 +315,7 @@ struct OrderConfirmPopup: View {
                         Button("CLEAR") { cashReceived = 0 }.buttonStyle(PosButtonStyle(filled: false, outlineColor: .posStatusVoid))
                         Button("EXACT") { cashReceived = totalValue }.buttonStyle(PosButtonStyle(filled: true))
                     }
+                    .padding(.top, 8)
                 }.frame(maxWidth: .infinity).frame(minWidth: 260)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("UANG DITERIMA").font(.system(size: 11)).foregroundColor(.posTextSecondary)
@@ -269,7 +332,7 @@ struct OrderConfirmPopup: View {
             Button("Cancel") { onClose() }.buttonStyle(PosButtonStyle(filled: false))
             Spacer()
             Button("Pay") { pay() }.buttonStyle(PosButtonStyle(filled: true)).disabled(working)
-        }.padding(12).background(Color.white).overlay(Rectangle().fill(Color.posDivider).frame(height: 1), alignment: .top)
+        }.padding(12).background(Color.posSurface).overlay(Rectangle().fill(Color.posDivider).frame(height: 1), alignment: .top)
     }
 
     private var displayGroups: [DisplayGroup] {
@@ -278,7 +341,12 @@ struct OrderConfirmPopup: View {
     private var cartGroups: [DisplayGroup] {
         var groups: [String: DisplayGroup] = [:]
         for item in tab.items {
-            let line = ConfirmLine(id: "\(item.productId)-\(item.skuId)", skuName: item.skuName, price: item.price, quantity: item.quantity, lineTotal: item.lineTotal)
+            let line = ConfirmLine(id: item.lineKey,
+                                   skuName: item.skuName,
+                                   options: item.customizations.map { $0.displayName }.joined(separator: " • "),
+                                   price: item.unitPrice,
+                                   quantity: item.quantity,
+                                   lineTotal: item.lineTotal)
             if var g = groups[item.productName] { g.lines.append(line); groups[item.productName] = g }
             else { groups[item.productName] = DisplayGroup(productName: item.productName, lines: [line]) }
         }
@@ -290,7 +358,12 @@ struct OrderConfirmPopup: View {
             let name = detail.productName ?? ""
             var group = groups[name] ?? DisplayGroup(productName: name, lines: [])
             for sku in detail.orderDetailSkus ?? [] {
-                group.lines.append(ConfirmLine(id: "\(name)-\(sku.skuName ?? "")", skuName: sku.skuName ?? "", price: sku.price ?? 0, quantity: Int(sku.quantity ?? 0), lineTotal: sku.amount ?? 0))
+                group.lines.append(ConfirmLine(id: "\(name)-\(sku.skuName ?? "")-\(sku.groupedCustomizationNames)",
+                                    skuName: sku.skuName ?? "",
+                                    options: sku.groupedCustomizationNames,
+                                   price: sku.price ?? 0,
+                                   quantity: Int(sku.quantity ?? 0),
+                                   lineTotal: sku.amount ?? 0))
             }
             groups[name] = group
         }
@@ -313,34 +386,21 @@ struct OrderConfirmPopup: View {
             toastManager.show("Insufficient cash entered!", style: .error)
             return
         }
+        guard let orderToPay = existingOrder ?? formVM.confirmedOrder else {
+            statusMessage = "No confirmed order to pay"
+            toastManager.show("No confirmed order", style: .error)
+            return
+        }
         statusMessage = nil
         withAnimation(.easeInOut(duration: 0.2)) { working = true }
         Task {
             do {
-                let orderToPay: Order
-                if isCartMode {
-                    let success = await formVM.confirmOrder(customerName: tab.customer, discount: CurrencyUtils.digitsOnly(tab.discount), remark: tab.remark)
-                    guard success, let order = formVM.confirmedOrder else {
-                        await MainActor.run {
-                            withAnimation(.easeInOut(duration: 0.2)) { working = false }
-                            let msg = formVM.error ?? "Failed to confirm order"
-                            statusMessage = msg
-                            toastManager.show(msg, style: .error)
-                        }
-                        return
-                    }
-                    orderToPay = order
-                } else if let order = existingOrder { orderToPay = order } else {
-                    await MainActor.run { withAnimation(.easeInOut(duration: 0.2)) { working = false } }
-                    return
-                }
                 let request = PaymentRequest(orderId: orderToPay.id, paymentId: selectedPayment)
                 let paidOrder = try await APIClient.shared.payOrder(request)
                 PrinterManager.print(PrintUtils.buildReceiptText(paidOrder)) { _ in }
                 await MainActor.run {
                     withAnimation(.easeInOut(duration: 0.2)) { working = false }
                     toastManager.show("Payment successful", style: .success)
-                    // FIX: close popup first, then remove tab after animation to avoid blank flash
                     onClose()
                     if isCartMode {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
@@ -368,6 +428,9 @@ private struct ConfirmLineRow: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(line.skuName).font(.system(size: 13, weight: .semibold)).foregroundColor(.posTextPrimary)
+                if !line.options.isEmpty {
+                    Text(line.options).font(.system(size: 11)).foregroundColor(.posAccent).lineLimit(1)
+                }
                 Text(CurrencyUtils.formatRp(line.price)).font(.system(size: 11, weight: .medium)).foregroundColor(.posTextPrimary).opacity(0.85)
             }
             Spacer()
@@ -376,6 +439,13 @@ private struct ConfirmLineRow: View {
         }.padding(.horizontal, 16).padding(.vertical, 5)
     }
 }
-private struct ConfirmLine: Identifiable { let id: String; let skuName: String; let price: Double; let quantity: Int; let lineTotal: Double }
+private struct ConfirmLine: Identifiable {
+    let id: String
+    let skuName: String
+    let options: String
+    let price: Double
+    let quantity: Int
+    let lineTotal: Double
+}
 private struct DisplayGroup: Identifiable { let productName: String; var lines: [ConfirmLine]; var id: String { productName } }
 

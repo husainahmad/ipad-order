@@ -66,6 +66,13 @@ final class APIClient {
         return user
     }
 
+    func productCustomizations(_ productId: Int) async throws -> [ProductCustomization] {
+        let response: ApiResponse<[ProductCustomization]> = try await send(
+            method: "GET", base: ConfigManager.baseMenu,
+            path: "api/v1/product/\(productId)/customization")
+        return response.data ?? []
+    }
+
     // MARK: - Orders
 
     func dailyOrders() async throws -> [Order] {
@@ -74,10 +81,12 @@ final class APIClient {
         return response.data ?? []
     }
 
-    func confirmOrder(_ request: OrderRequest) async throws -> Order {
+    func confirmOrder(_ request: OrderRequest, idempotencyKey: String? = nil) async throws -> Order {
         let body = try JSONEncoder().encode(request)
+        let headers = idempotencyKey.map { ["Idempotency-Key": $0] }
         let response: ApiResponse<Order> = try await send(
-            method: "POST", base: ConfigManager.baseOrder, path: "api/v1/order", body: body)
+            method: "POST", base: ConfigManager.baseOrder, path: "api/v1/order",
+            body: body, headers: headers)
         guard let order = response.data else {
             throw ApiError.invalidResponse
         }
@@ -148,6 +157,7 @@ final class APIClient {
                                     path: String,
                                     body: Data? = nil,
                                     query: [URLQueryItem]? = nil,
+                                    headers: [String: String]? = nil,
                                     authenticated: Bool = true) async throws -> T {
         var components = URLComponents(string: base + path)
         if let query = query {
@@ -163,6 +173,11 @@ final class APIClient {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
+        if let headers = headers {
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
         if authenticated, !TokenManager.accessToken.isEmpty {
             request.setValue("Bearer \(TokenManager.accessToken)", forHTTPHeaderField: "Authorization")
         }
@@ -176,7 +191,8 @@ final class APIClient {
             let refreshed = await refreshGate.perform { await self.refreshAccessToken() }
             if refreshed {
                 return try await send(method: method, base: base, path: path,
-                                      body: body, query: query, authenticated: authenticated)
+                                      body: body, query: query, headers: headers,
+                                      authenticated: authenticated)
             }
             TokenManager.clearTokens()
             NotificationCenter.default.post(name: .didReceiveNotAuthenticated, object: nil)

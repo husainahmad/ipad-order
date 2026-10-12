@@ -20,10 +20,12 @@ struct Sku: Codable, Identifiable, Hashable {
 struct ProductImage: Codable, Hashable {
     let id: Int?
     let fileName: String?
-    let imageBlob: String?
+    let url: String?
     let mimeType: String?
 
-    var imageBlobValue: String { imageBlob ?? "" }
+    /// The hosted image location. The menu service uploads to ImgBB and stores the
+    /// returned link, so the app never receives image bytes — only this URL.
+    var urlValue: String { url ?? "" }
 }
 
 struct Product: Codable, Identifiable, Hashable {

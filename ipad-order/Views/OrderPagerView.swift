@@ -42,34 +42,41 @@ struct OrderPagerView: View {
     private var tabHeader: some View {
         ZStack {
             Color.posSurfaceContainer
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    tabChip(title: "Orders",
-                            icon: "list.bullet.rectangle",
-                            isSelected: formVM.selectedPage == 0) {
-                        formVM.handlePageSelection(0)
-                    }
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        tabChip(title: "Orders",
+                                icon: "list.bullet.rectangle",
+                                isSelected: formVM.selectedPage == 0) {
+                            formVM.handlePageSelection(0)
+                        }
+                        .id(0)
 
-                    ForEach(formVM.tabs) { tab in
-                        tabChip(title: tab.label,
-                                icon: "note.text",
-                                isSelected: formVM.selectedPage == tab.id,
-                                isCloseable: true) {
-                            formVM.handlePageSelection(tab.id)
-                        } onClose: {
-                            confirmAndRemove(tab.id)
+                        ForEach(formVM.tabs) { tab in
+                            tabChip(title: tab.label,
+                                    icon: "note.text",
+                                    isSelected: formVM.selectedPage == tab.id,
+                                    isCloseable: true) {
+                                formVM.handlePageSelection(tab.id)
+                            } onClose: {
+                                confirmAndRemove(tab.id)
+                            }
+                            .id(tab.id)
+                        }
+
+                        tabChip(title: "NEW ORDER",
+                                icon: "plus",
+                                isSelected: false,
+                                highlighted: true) {
+                            _ = formVM.createNewTab()
                         }
                     }
-
-                    tabChip(title: "NEW ORDER",
-                            icon: "plus",
-                            isSelected: false,
-                            highlighted: true) {
-                        _ = formVM.createNewTab()
-                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .onChange(of: formVM.selectedPage) { target in
+                    proxy.scrollTo(target, anchor: .center)
+                }
             }
         }
         .frame(height: 60)
@@ -112,13 +119,14 @@ struct OrderPagerView: View {
             .frame(height: 40)
             .background(highlighted
                         ? AnyShapeStyle(Color.posAccentGradient)
-                        : (isSelected ? AnyShapeStyle(Color.posPrimaryGradient) : AnyShapeStyle(Color.posSurfaceContainerHigh)))
+                        : (isSelected ? AnyShapeStyle(Color.posPrimary) : AnyShapeStyle(Color.posSurfaceContainerHigh)))
             .overlay(
                 RoundedRectangle(cornerRadius: PosShape.cornerMedium)
                     .stroke(highlighted ? Color.clear : (isSelected ? Color.clear : Color.posOutlineVariant), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: PosShape.cornerMedium))
             .shadow(color: (isSelected || highlighted) ? Color.black.opacity(0.2) : Color.clear, radius: 6, x: 0, y: 2)
+            .animation(nil, value: isSelected)
         }
         .buttonStyle(.plain)
     }

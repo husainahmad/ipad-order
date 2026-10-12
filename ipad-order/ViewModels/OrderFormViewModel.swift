@@ -16,6 +16,8 @@ final class OrderTab: ObservableObject, Identifiable {
     @Published var loadingCategories = false
     @Published var loadingProducts = false
     @Published var error: String?
+    @Published var confirmedOrder: Order?
+    @Published private(set) var idempotencyKey: String
 
     init(id: Int, label: String) {
         self.id = id
@@ -24,6 +26,12 @@ final class OrderTab: ObservableObject, Identifiable {
         self.customer = ""
         self.discount = "0"
         self.remark = ""
+        self.idempotencyKey = UUID().uuidString
+    }
+
+    func rotateIdempotencyKey() {
+        idempotencyKey = UUID().uuidString
+        confirmedOrder = nil
     }
 
     var subtotal: Double {
@@ -38,6 +46,12 @@ final class OrderFormViewModel: ObservableObject {
     @Published var submitting = false
     @Published var error: String?
     @Published var confirmedOrder: Order?
+
+    /// Customization groups per product, held for the session. A product's
+    /// customizations decide whether it can be added straight to the cart or needs
+    /// the option picker, so they are resolved once on first tap and reused.
+    @Published private(set) var customizationsByProductId: [Int: [ProductCustomization]] = [:]
+    @Published private(set) var loadingCustomizationProductId: Int?
 
     private var sequence = 0
 
@@ -80,24 +94,60 @@ final class OrderFormViewModel: ObservableObject {
     }
 
     func setCustomer(_ value: String) {
-        activeTab?.customer = value
+        guard let tab = activeTab, tab.customer != value else { return }
+        tab.customer = value
+        invalidatePendingOrder(tab)
     }
 
     func setDiscount(_ value: String) {
-        activeTab?.discount = value
+        guard let tab = activeTab, tab.discount != value else { return }
+        tab.discount = value
+        invalidatePendingOrder(tab)
     }
 
     func setRemark(_ value: String) {
-        activeTab?.remark = value
+        guard let tab = activeTab, tab.remark != value else { return }
+        tab.remark = value
+        invalidatePendingOrder(tab)
     }
 
     func setStoreServiceType(_ id: Int) {
-        activeTab?.storeServiceTypesId = id
+        guard let tab = activeTab, tab.storeServiceTypesId != id else { return }
+        tab.storeServiceTypesId = id
+        invalidatePendingOrder(tab)
     }
 
-    func addToCart(product: Product, sku: Sku) {
+    func customizations(for productId: Int) -> [ProductCustomization] {
+        customizationsByProductId[productId] ?? []
+    }
+
+    /// Resolves and memoises a product's customizations. Returns the groups so the
+    /// caller can decide the tap behaviour without a second lookup.
+    @discardableResult
+    func loadCustomizations(productId: Int) async -> [ProductCustomization] {
+        if let cached = customizationsByProductId[productId] { return cached }
+        loadingCustomizationProductId = productId
+        defer { if loadingCustomizationProductId == productId { loadingCustomizationProductId = nil } }
+        do {
+            let groups = try await APIClient.shared.productCustomizations(productId)
+            customizationsByProductId[productId] = groups
+            return groups
+        } catch let apiError as ApiError {
+            error = apiError.localizedDescription
+            customizationsByProductId[productId] = []
+            return []
+        } catch {
+            self.error = "Network error: \(error.localizedDescription)"
+            customizationsByProductId[productId] = []
+            return []
+        }
+    }
+
+    func addToCart(product: Product, sku: Sku, customizations: [SelectedCustomization] = []) {
         guard let tab = activeTab else { return }
-        if let index = tab.items.firstIndex(where: { $0.productId == product.id && $0.skuId == sku.id }) {
+        let key = CartItem.lineKey(productId: product.id, skuId: sku.id,
+                                   optionIds: customizations.flatOptionIds)
+        if let index = tab.items.firstIndex(where: { $0.lineKey == key }) {
             tab.items[index].addQuantity(1)
         } else {
             tab.items.append(CartItem(productId: product.id,
@@ -106,31 +156,43 @@ final class OrderFormViewModel: ObservableObject {
                                       skuId: sku.id,
                                       skuName: sku.name ?? "",
                                       price: sku.price,
-                                      quantity: 1))
+                                      quantity: 1,
+                                      customizations: customizations))
         }
+        invalidatePendingOrder(tab)
     }
 
-    func increment(productId: Int, skuId: Int) {
+    func increment(lineKey: String) {
         guard let tab = activeTab,
-              let index = tab.items.firstIndex(where: { $0.productId == productId && $0.skuId == skuId }) else { return }
+              let index = tab.items.firstIndex(where: { $0.lineKey == lineKey }) else { return }
         tab.items[index].addQuantity(1)
+        invalidatePendingOrder(tab)
     }
 
-    func decrement(productId: Int, skuId: Int) {
+    func decrement(lineKey: String) {
         guard let tab = activeTab,
-              let index = tab.items.firstIndex(where: { $0.productId == productId && $0.skuId == skuId }) else { return }
+              let index = tab.items.firstIndex(where: { $0.lineKey == lineKey }) else { return }
         tab.items[index].addQuantity(-1)
         if tab.items[index].quantity <= 0 {
             tab.items.remove(at: index)
         }
+        invalidatePendingOrder(tab)
     }
 
-    func removeItem(productId: Int, skuId: Int) {
+    func removeItem(lineKey: String) {
         guard let tab = activeTab,
-              let index = tab.items.firstIndex(where: { $0.productId == productId && $0.skuId == skuId }) else { return }
+              let index = tab.items.firstIndex(where: { $0.lineKey == lineKey }) else { return }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
             tab.items.remove(at: index)
         }
+        invalidatePendingOrder(tab)
+    }
+
+    /// Called whenever any order-affecting input changes. Clears the known
+    /// confirmed order and rotates the idempotency key so a re-confirm with
+    /// a changed cart is treated as a brand-new request.
+    private func invalidatePendingOrder(_ tab: OrderTab) {
+        tab.rotateIdempotencyKey()
     }
 
     @discardableResult
@@ -154,9 +216,7 @@ final class OrderFormViewModel: ObservableObject {
         return nextId
     }
 
-    func resetConfirmedOrder() {
-        confirmedOrder = nil
-    }
+    
 
     func reset() {
         tabs.removeAll()
@@ -164,6 +224,8 @@ final class OrderFormViewModel: ObservableObject {
         submitting = false
         error = nil
         confirmedOrder = nil
+        customizationsByProductId = [:]
+        loadingCustomizationProductId = nil
         sequence = 0
     }
 
@@ -173,13 +235,23 @@ final class OrderFormViewModel: ObservableObject {
             return false
         }
         error = nil
+
+        // Idempotency: this cart was already confirmed (user closed the payment
+        // screen without paying). Reuse the existing order instead of creating
+        // a duplicate. invalidatePendingOrder() clears this on any cart change.
+        if let existing = tab.confirmedOrder {
+            confirmedOrder = existing
+            return true
+        }
+
         submitting = true
         defer { submitting = false }
 
         let request = buildRequest(tab: tab, customerName: customerName,
                                    discount: discount, remark: remark)
         do {
-            let order = try await APIClient.shared.confirmOrder(request)
+            let order = try await APIClient.shared.confirmOrder(request, idempotencyKey: tab.idempotencyKey)
+            tab.confirmedOrder = order
             confirmedOrder = order
             return true
         } catch let apiError as ApiError {
@@ -205,7 +277,10 @@ final class OrderFormViewModel: ObservableObject {
         for group in grouped.values.sorted(by: { $0.first?.productName ?? "" < $1.first?.productName ?? "" }) {
             guard let first = group.first else { continue }
             let skus = group.map {
-                OrderDetailSkuRequest(skuId: $0.skuId, skuName: $0.skuName, quantity: $0.quantity)
+                OrderDetailSkuRequest(skuId: $0.skuId,
+                                      skuName: $0.skuName,
+                                      quantity: $0.quantity,
+                                      customizations: $0.customizationRequests)
             }
             details.append(OrderDetailRequest(productId: first.productId,
                                               productName: first.productName,

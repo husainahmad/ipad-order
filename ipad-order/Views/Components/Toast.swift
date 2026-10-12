@@ -74,7 +74,7 @@ struct ToastView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color.white)
+        .background(Color.posSurface)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(toast.style.color.opacity(0.25), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
