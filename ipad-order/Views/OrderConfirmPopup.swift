@@ -357,20 +357,22 @@ struct OrderConfirmPopup: View {
         for detail in existingOrder?.orderDetails ?? [] {
             let name = detail.productName ?? ""
             var group = groups[name] ?? DisplayGroup(productName: name, lines: [])
+            // Choices belong to the product line, so every SKU row under it shows them.
+            let options = detail.groupedCustomizationNames
             for sku in detail.orderDetailSkus ?? [] {
-                group.lines.append(ConfirmLine(id: "\(name)-\(sku.skuName ?? "")-\(sku.groupedCustomizationNames)",
+                group.lines.append(ConfirmLine(id: "\(name)-\(sku.skuName ?? "")-\(options)",
                                     skuName: sku.skuName ?? "",
-                                    options: sku.groupedCustomizationNames,
-                                   price: sku.price ?? 0,
-                                   quantity: Int(sku.quantity ?? 0),
-                                   lineTotal: sku.amount ?? 0))
+                                    options: options,
+                                   price: sku.priceValue,
+                                   quantity: Int(sku.quantityValue),
+                                   lineTotal: sku.amountValue))
             }
             groups[name] = group
         }
         return groups.values.sorted { $0.productName < $1.productName }
     }
     private var totalItemCount: Int {
-        isCartMode ? tab.items.reduce(0) { $0 + $1.quantity } : (existingOrder?.orderDetails ?? []).reduce(0) { $0 + ($1.orderDetailSkus ?? []).reduce(0) { $0 + Int($1.quantity ?? 0) } }
+        isCartMode ? tab.items.reduce(0) { $0 + $1.quantity } : (existingOrder?.orderDetails ?? []).reduce(0) { $0 + ($1.orderDetailSkus ?? []).reduce(0) { $0 + Int($1.quantityValue) } }
     }
     private var subTotalValue: Double { isCartMode ? tab.subtotal : existingOrder?.subTotalValue ?? 0 }
     private var discountValue: Double { isCartMode ? Double(CurrencyUtils.digitsOnly(tab.discount)) ?? 0 : existingOrder?.discountTotalValue ?? 0 }

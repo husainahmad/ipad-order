@@ -41,17 +41,18 @@ enum PrintUtils {
                 sb += "\(detail.productName ?? "")\n"
                 if let skus = detail.orderDetailSkus {
                     for sku in skus {
-                        let left = "  \(sku.skuName ?? "") x\(Int(sku.quantity ?? 0))"
-                        let right = CurrencyUtils.formatRp(sku.amount ?? 0)
+                        let left = "  \(sku.skuName ?? "") x\(Int(sku.quantityValue))"
+                        let right = CurrencyUtils.formatRp(sku.amountValue)
                         sb += twoCol(left: left, right: right)
-                        for group in sku.customizationsByGroup {
-                            if !group.name.isEmpty {
-                                sb += customizationGroupLine(group.name)
-                            }
-                            for opt in group.items {
-                                sb += customizationOptionLine(opt, showPrice: true)
-                            }
-                        }
+                    }
+                }
+                // Choices are stored against the product line, not the SKU.
+                for group in detail.customizationsByGroup {
+                    if !group.name.isEmpty {
+                        sb += customizationGroupLine(group.name)
+                    }
+                    for opt in group.items {
+                        sb += customizationOptionLine(opt, showPrice: true)
                     }
                 }
             }
@@ -94,15 +95,15 @@ enum PrintUtils {
                 sb += "\(detail.productName ?? "")\n"
                 if let skus = detail.orderDetailSkus {
                     for sku in skus {
-                        sb += twoCol(left: "  \(sku.skuName ?? "") x\(Int(sku.quantity ?? 0))", right: "")
-                        for cGroup in sku.customizationsByGroup {
-                            if !cGroup.name.isEmpty {
-                                sb += customizationGroupLine(cGroup.name)
-                            }
-                            for opt in cGroup.items {
-                                sb += customizationOptionLine(opt, showPrice: false)
-                            }
-                        }
+                        sb += twoCol(left: "  \(sku.skuName ?? "") x\(Int(sku.quantityValue))", right: "")
+                    }
+                }
+                for cGroup in detail.customizationsByGroup {
+                    if !cGroup.name.isEmpty {
+                        sb += customizationGroupLine(cGroup.name)
+                    }
+                    for opt in cGroup.items {
+                        sb += customizationOptionLine(opt, showPrice: false)
                     }
                 }
             }

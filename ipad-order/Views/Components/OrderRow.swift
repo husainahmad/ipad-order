@@ -28,6 +28,15 @@ struct OrderRow: View {
                         .foregroundColor(.posTextSecondary)
                         .lineLimit(1)
                 }
+                // What was ordered, with its choices — the list is the only place an
+                // order can be identified without opening it.
+                if !order.itemsSummary.isEmpty {
+                    Text(order.itemsSummary)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.posTextSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(width: rel(2.2))

@@ -184,6 +184,43 @@ struct OrderDetailSheet: View {
 
     // MARK: - Items breakdown with customizations
 
+    /// The choices made on one product line, grouped by their customization and with
+    /// the surcharge each option carried.
+    private func customizationView(_ detail: OrderDetail) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(detail.customizationsByGroup.enumerated()), id: \.offset) { _, group in
+                VStack(alignment: .leading, spacing: 3) {
+                    if !group.name.isEmpty {
+                        Text(group.name.uppercased())
+                            .font(.system(size: 10, weight: .heavy))
+                            .foregroundColor(.posTextSecondary)
+                            .tracking(0.4)
+                    }
+                    ForEach(Array(group.items.enumerated()), id: \.offset) { _, opt in
+                        HStack(spacing: 6) {
+                            Text("• \(opt.displayName)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.posTextPrimary)
+                            Spacer()
+                            if opt.priceValue > 0 {
+                                Text("+\(CurrencyUtils.formatRp(opt.amountValue))")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.posAccent)
+                            }
+                        }
+                        .padding(.leading, group.name.isEmpty ? 0 : 8)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.posAccentSoft.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+
     private var itemsListView: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let details = order.orderDetails, !details.isEmpty {
@@ -197,61 +234,32 @@ struct OrderDetailSheet: View {
                             .padding(.vertical, 8)
                             .background(Color.posRowOdd)
                         ForEach(Array((detail.orderDetailSkus ?? []).enumerated()), id: \.offset) { _, sku in
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: 8) {
-                                    Text(sku.skuName ?? "")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundColor(.posTextPrimary)
-                                    Spacer()
-                                    Text("x\(Int(sku.quantity ?? 0))")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(Color.posAccent)
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                                    Text(CurrencyUtils.formatRp(sku.amount ?? 0))
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundColor(.posTextPrimary)
-                                        .frame(minWidth: 90, alignment: .trailing)
-                                }
-                                if sku.hasCustomizations {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        ForEach(Array(sku.customizationsByGroup.enumerated()), id: \.offset) { _, group in
-                                            VStack(alignment: .leading, spacing: 3) {
-                                                if !group.name.isEmpty {
-                                                    Text(group.name.uppercased())
-                                                        .font(.system(size: 10, weight: .heavy))
-                                                        .foregroundColor(.posTextSecondary)
-                                                        .tracking(0.4)
-                                                }
-                                                ForEach(Array(group.items.enumerated()), id: \.offset) { _, opt in
-                                                    HStack(spacing: 6) {
-                                                        Text("• \(opt.displayName)")
-                                                            .font(.system(size: 12, weight: .medium))
-                                                            .foregroundColor(.posTextPrimary)
-                                                        Spacer()
-                                                        if opt.priceValue > 0 {
-                                                            Text("+\(CurrencyUtils.formatRp(opt.amountValue))")
-                                                                .font(.system(size: 11, weight: .semibold))
-                                                                .foregroundColor(.posAccent)
-                                                        }
-                                                    }
-                                                    .padding(.leading, group.name.isEmpty ? 0 : 8)
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .padding(8)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color.posAccentSoft.opacity(0.5))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                }
+                            HStack(spacing: 8) {
+                                Text(sku.skuName ?? "")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.posTextPrimary)
+                                Spacer()
+                                Text("x\(Int(sku.quantityValue))")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color.posAccent)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                Text(CurrencyUtils.formatRp(sku.amountValue))
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.posTextPrimary)
+                                    .frame(minWidth: 90, alignment: .trailing)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(Color.white)
                             Divider().opacity(0.5)
+                        }
+                        // Choices are stored against the product line, not the SKU, so they
+                        // render once beneath it however many SKUs it carries.
+                        if detail.hasCustomizations {
+                            customizationView(detail)
                         }
                     }
                     .background(Color.white)
