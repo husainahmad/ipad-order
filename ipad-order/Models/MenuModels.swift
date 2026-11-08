@@ -37,3 +37,11 @@ struct Product: Codable, Identifiable, Hashable {
 
     var nameValue: String { name ?? "" }
 }
+
+/// One page of products plus the cursor for the next one. Paging is on a product id
+/// rather than an offset, so an insert between requests cannot repeat a row.
+struct ProductPageResponse: Decodable {
+    let products: [Product]
+    let nextCursor: Int?
+    let hasMore: Bool?
+}

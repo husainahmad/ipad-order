@@ -16,7 +16,7 @@ struct OrderFilterBar: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: f.icon).font(.system(size: 11, weight: .bold))
-                        Text(f.rawValue).font(.system(size: 13, weight: .bold))
+                        Text(LocalizedStringKey(f.rawValue)).font(.system(size: 13, weight: .bold))
                         if f != .all {
                             Text("\(count(for: f))")
                                 .font(.system(size: 11, weight: .bold))

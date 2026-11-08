@@ -271,6 +271,16 @@ extension View {
     func posFade(_ value: Bool) -> some View {
         self.opacity(value ? 1 : 0)
     }
+
+    /// Letter spacing that degrades gracefully below iOS 16 (where `tracking` landed).
+    @ViewBuilder
+    func posTracking(_ value: CGFloat) -> some View {
+        if #available(iOS 16.0, *) {
+            self.tracking(value)
+        } else {
+            self
+        }
+    }
 }
 
 // MARK: - Theme mode (light default, cafe for Coffee & Restaurant POS)

@@ -7,6 +7,10 @@ final class OrderTab: ObservableObject, Identifiable {
     let label: String
     @Published var items: [CartItem]
     @Published var customer: String
+    /// The registered customer this order belongs to, when the cashier picked one
+    /// from a search. `nil` means a walk-in and the order travels with `customerId`
+    /// `-1`, which is what the order service has always used for that case.
+    @Published var customerRecord: Customer?
     @Published var discount: String
     @Published var remark: String
     @Published var storeServiceTypesId: Int = 1
@@ -15,6 +19,10 @@ final class OrderTab: ObservableObject, Identifiable {
     @Published var selectedCategoryId: Int?
     @Published var loadingCategories = false
     @Published var loadingProducts = false
+    /// Cursor for the next product page; nil on a fresh category or the last page.
+    @Published var productsNextCursor: Int?
+    @Published var productsHasMore = true
+    @Published var loadingMoreProducts = false
     @Published var error: String?
     @Published var confirmedOrder: Order?
     @Published private(set) var idempotencyKey: String
@@ -24,6 +32,7 @@ final class OrderTab: ObservableObject, Identifiable {
         self.label = label
         self.items = []
         self.customer = ""
+        self.customerRecord = nil
         self.discount = "0"
         self.remark = ""
         self.idempotencyKey = UUID().uuidString
@@ -36,6 +45,19 @@ final class OrderTab: ObservableObject, Identifiable {
 
     var subtotal: Double {
         items.reduce(0) { $0 + $1.lineTotal }
+    }
+
+    /// The registered customer this order can be filed under, given the name the
+    /// till currently shows. Returns `nil` when the name was edited after picking
+    /// someone — sending the stale id then would credit the sale to the wrong person.
+    /// A customer with no name is matched by phone instead, which is what the cart
+    /// displays for such a record.
+    func linkedCustomer(typedName: String) -> Customer? {
+        guard let record = customerRecord else { return nil }
+        let typed = typedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stillNamed = !record.nameValue.isEmpty && record.nameValue == typed
+        let identifiedByPhone = record.nameValue.isEmpty && record.phoneValue == typed
+        return (stillNamed || identifiedByPhone) ? record : nil
     }
 }
 
@@ -96,6 +118,28 @@ final class OrderFormViewModel: ObservableObject {
     func setCustomer(_ value: String) {
         guard let tab = activeTab, tab.customer != value else { return }
         tab.customer = value
+        // Typing a name by hand detaches the order from a registered customer: the
+        // id would otherwise point at someone the cashier just renamed over.
+        if tab.customerRecord?.nameValue != value {
+            tab.customerRecord = nil
+        }
+        invalidatePendingOrder(tab)
+    }
+
+    /// Binds a registered customer to the order. The name travels with the id so a
+    /// receipt and the order row stay readable without a second lookup.
+    func selectCustomer(_ customer: Customer) {
+        guard let tab = activeTab else { return }
+        tab.customerRecord = customer
+        tab.customer = customer.nameValue.isEmpty ? customer.phoneValue : customer.nameValue
+        invalidatePendingOrder(tab)
+    }
+
+    /// Returns the order to a walk-in: no id, no name.
+    func clearCustomer() {
+        guard let tab = activeTab else { return }
+        tab.customerRecord = nil
+        tab.customer = ""
         invalidatePendingOrder(tab)
     }
 
@@ -137,18 +181,20 @@ final class OrderFormViewModel: ObservableObject {
             customizationsByProductId[productId] = []
             return []
         } catch {
-            self.error = "Network error: \(error.localizedDescription)"
+            self.error = L10n.t("Network error: %@", error.localizedDescription)
             customizationsByProductId[productId] = []
             return []
         }
     }
 
-    func addToCart(product: Product, sku: Sku, customizations: [SelectedCustomization] = []) {
+    func addToCart(product: Product, sku: Sku, customizations: [SelectedCustomization] = [],
+                   quantity: Int = 1) {
         guard let tab = activeTab else { return }
+        let qty = max(1, quantity)
         let key = CartItem.lineKey(productId: product.id, skuId: sku.id,
                                    optionIds: customizations.flatOptionIds)
         if let index = tab.items.firstIndex(where: { $0.lineKey == key }) {
-            tab.items[index].addQuantity(1)
+            tab.items[index].addQuantity(qty)
         } else {
             tab.items.append(CartItem(productId: product.id,
                                       productName: product.nameValue,
@@ -156,7 +202,7 @@ final class OrderFormViewModel: ObservableObject {
                                       skuId: sku.id,
                                       skuName: sku.name ?? "",
                                       price: sku.price,
-                                      quantity: 1,
+                                      quantity: qty,
                                       customizations: customizations))
         }
         invalidatePendingOrder(tab)
@@ -193,6 +239,13 @@ final class OrderFormViewModel: ObservableObject {
     /// a changed cart is treated as a brand-new request.
     private func invalidatePendingOrder(_ tab: OrderTab) {
         tab.rotateIdempotencyKey()
+        // The payment dialog reads `confirmedOrder` to decide which order to pay. An
+        // edit leaves the old order stale on the server, so it is dropped here too —
+        // otherwise a cashier who changes the customer and taps Pay would pay the
+        // order as it was before the edit.
+        if tab.id == activeTab?.id {
+            confirmedOrder = nil
+        }
     }
 
     @discardableResult
@@ -256,13 +309,13 @@ final class OrderFormViewModel: ObservableObject {
             return true
         } catch let apiError as ApiError {
             if case .http(let code) = apiError {
-                error = "Confirm order failed: HTTP \(code)"
+                error = L10n.t("Confirm order failed: HTTP %d", code)
             } else {
                 error = apiError.localizedDescription
             }
             return false
         } catch {
-            self.error = "Network error: \(error.localizedDescription)"
+            self.error = L10n.t("Network error: %@", error.localizedDescription)
             return false
         }
     }
@@ -287,8 +340,15 @@ final class OrderFormViewModel: ObservableObject {
                                               categoryId: first.categoryId,
                                               orderDetailSkus: skus))
         }
+        // Only a customer whose identity still matches the till input counts as
+        // linked. The cashier may have renamed the order after picking someone;
+        // sending the stale id then would credit the sale to the wrong person.
+        let linked = tab.linkedCustomer(typedName: customerName)
         return OrderRequest(storeServiceTypesId: tab.storeServiceTypesId,
-                            customerName: customerName, remark: remark,
+                            customerName: customerName,
+                            customerId: linked?.id ?? -1,
+                            customerPhone: linked?.phoneValue ?? "",
+                            remark: remark,
                             orderDetails: details, discount: discount)
     }
 }

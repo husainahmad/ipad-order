@@ -1,15 +1,15 @@
 import SwiftUI
 import UIKit
 
-// MARK: - ProductDetailPopup (compact POS dialog)
-// FIX: Replaces system .sheet (900-1000pt wide) with compact centered dialog ~420pt.
-// No .sheet, no .presentationDetents, no GeometryReader, no outer white background.
-// Preserves: colors, fonts, SKU layout, ProductImageThumb, business logic.
+// MARK: - ProductDetailPopup (POS customization dialog)
 //
-// Variant selection plus the product's customization groups. The cashier picks a
-// SKU, then answers each group (single or multiple, bounded by the group's min/max),
-// then commits the whole line in one go. Only option IDs reach the order service —
-// it resolves the names and prices itself.
+// Layout follows the POS mockup: product header, variant chips, one row of
+// choice chips per single-answer group, a two-column grid of checkbox cards for
+// multi-answer groups, a kitchen note, and a footer with the line quantity and a
+// single "Add to order" button showing the line total.
+//
+// Options are still resolved client-side only for display; the order service
+// re-prices the line from the option ids.
 
 struct ProductDetailPopup: View {
     let product: Product
@@ -19,450 +19,375 @@ struct ProductDetailPopup: View {
 
     @State private var selectedSkuId: Int?
     @State private var selection = CustomizationSelection()
+    @State private var quantity = 1
+    @State private var note = ""
 
     private var skus: [Sku] { product.skus ?? [] }
     private var groups: [ProductCustomization] { formVM.customizations(for: product.id) }
     private var selectedSku: Sku? { skus.first { $0.id == selectedSkuId } }
     private var isLoading: Bool { formVM.loadingCustomizationProductId == product.id }
+    private var multipleSkus: Bool { skus.count > 1 }
 
-    private var pending: [SelectedCustomization] {
-        selection.resolved(from: groups)
-    }
+    private var pending: [SelectedCustomization] { selection.resolved(from: groups) }
 
     private var pendingSurcharge: Double {
         pending.reduce(0) { $0 + $1.price * Double(max(1, $1.quantity)) }
     }
 
-    private var pendingTotal: Double {
-        (selectedSku?.price ?? 0) + pendingSurcharge
-    }
+    private var unitTotal: Double { (selectedSku?.price ?? 0) + pendingSurcharge }
+    private var lineTotal: Double { unitTotal * Double(max(1, quantity)) }
 
-    private var unmet: [ProductCustomization] {
-        selection.unmetRequirements(in: groups)
-    }
-
+    private var unmet: [ProductCustomization] { selection.unmetRequirements(in: groups) }
     private var canAdd: Bool { selectedSku != nil && unmet.isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 0) {
             header
-            variantSection
+            Divider().overlay(Color.posDivider)
 
-            if !groups.isEmpty {
-                Divider().opacity(0.6)
-                // Options are chosen for a specific SKU, so they stay locked until
-                // one is picked. A single-SKU product auto-selects on appear, so it
-                // never shows this state.
-                if selectedSku == nil {
-                    lockedCustomizationHint
-                } else {
-                    customizationSections
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if multipleSkus { variantSection }
+                    if isLoading {
+                        HStack(spacing: 8) {
+                            ProgressView().scaleEffect(0.7)
+                            Text("Loading options...").font(.system(size: 12)).foregroundColor(.posTextSecondary)
+                        }
+                    }
+                    ForEach(groups) { group in
+                        groupSection(group)
+                    }
+
+                    noteSection
                 }
+                .padding(20)
             }
+            .frame(maxHeight: .infinity)
 
+            Divider().overlay(Color.posDivider)
             footer
         }
-        .padding(16)
-        .frame(width: min(420, UIScreen.main.bounds.width - 32))
-        .frame(maxHeight: min(640, UIScreen.main.bounds.height * 0.86))
-        .background(Color.posSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: Color.black.opacity(0.18), radius: 20, x: 0, y: 10)
-        .onAppear(perform: selectDefaultSku)
-        .task(id: product.id) { await formVM.loadCustomizations(productId: product.id) }
-        .onChange(of: selectedSkuId) { newValue in
-            // Options are chosen per SKU, so a different SKU starts a fresh answer.
-            if newValue != initialSkuId { selection = CustomizationSelection() }
+        .frame(width: min(560, UIScreen.main.bounds.width - 40))
+        .frame(maxHeight: min(760, UIScreen.main.bounds.height * 0.92))
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: Color.black.opacity(0.18), radius: 24, x: 0, y: 10)
+        .onAppear {
+            note = formVM.activeTab?.remark ?? ""
+            if skus.count == 1 { selectedSkuId = skus.first?.id }
         }
+        .task(id: product.id) { await formVM.loadCustomizations(productId: product.id) }
+        .dismissKeyboardOnTap()
     }
 
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 10) {
-            ProductImageThumb(product: product)
-                .frame(width: 50, height: 50)
-                .background(Color.posSurfaceVariant)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(product.nameValue)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(Color.posTextPrimary)
-                if selectedSku != nil {
-                    Text(selectedSku?.name ?? "")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Color.posAccent)
-                }
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.posTextPrimary)
+                Text(subtitle)
+                    .font(.system(size: 15))
+                    .foregroundColor(.posTextSecondary)
             }
             Spacer()
             Button { onClose() } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(Color.posTextSecondary)
-                    .frame(width: 30, height: 30)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.posTextPrimary)
+                    .frame(width: 40, height: 40)
                     .background(Color.posBgLight)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close")
         }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
     }
 
-    // MARK: - Variants
+    private var subtitle: String {
+        let price = selectedSku?.price ?? (skus.first?.price ?? 0)
+        var text = CurrencyUtils.formatRp(price)
+        if let sku = selectedSku, multipleSkus { text += " · \(sku.name ?? "")" }
+        return text
+    }
+
+    // MARK: - Variant chips
 
     private var variantSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(Color.posPrimary)
-                Text(skus.count > 1 ? "Select Variant" : "Select Item")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Color.posPrimary)
-                if isLoading {
-                    Spacer()
-                    ProgressView().scaleEffect(0.7)
+        VStack(alignment: .leading, spacing: 8) {
+            groupHeader(title: "Select Variant", hint: nil)
+            chipRow {
+                ForEach(skus) { sku in
+                    ChoiceChip(text: "\(sku.name ?? "") · \(CurrencyUtils.formatRp(sku.price))",
+                               selected: sku.id == selectedSkuId) {
+                        UISelectionFeedbackGenerator().selectionChanged()
+                        if selectedSkuId == sku.id {
+                            selectedSkuId = nil
+                        } else {
+                            selectedSkuId = sku.id
+                            selection = CustomizationSelection()
+                        }
+                    }
                 }
             }
+        }
+    }
 
-            if skus.isEmpty {
-                Text("No variants available")
+    // MARK: - Groups
+
+    @ViewBuilder
+    private func groupSection(_ group: ProductCustomization) -> some View {
+        // Options are chosen for a specific SKU; lock them until one is picked.
+        let locked = multipleSkus && selectedSku == nil
+        VStack(alignment: .leading, spacing: 8) {
+            groupHeader(title: group.nameValue, hint: groupHint(group))
+
+            if locked {
+                Text("Select a variant above to choose options")
                     .font(.system(size: 12))
-                    .foregroundColor(Color.posTextSecondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(8)
+                    .foregroundColor(.posTextSecondary)
+                    .padding(.horizontal, 12).frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                     .background(Color.posBgLight)
-                    .cornerRadius(6)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            } else if group.allowsMultiple {
+                optionGrid(group)
             } else {
-                VStack(spacing: 6) {
-                    ForEach(skus) { sku in
-                        variantRow(sku)
+                chipRow {
+                    ForEach(group.sortedOptions) { option in
+                        ChoiceChip(text: chipLabel(option),
+                                   selected: selection.isSelected(option.id, in: group.customizationId)) {
+                            selection.select(option.id, in: group)
+                        }
                     }
                 }
             }
         }
+        .opacity(locked ? 0.5 : 1)
     }
 
-    private func variantRow(_ sku: Sku) -> some View {
-        let isSelected = sku.id == selectedSkuId
-        let qty = cartQuantity(forSku: sku.id)
-        return Button {
-            withAnimation(.spring(response: 0.24, dampingFraction: 0.7)) { selectedSkuId = isSelected ? nil : sku.id }
-            UISelectionFeedbackGenerator().selectionChanged()
-        } label: {
-            HStack(spacing: 0) {
-                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 15))
-                    .foregroundColor(isSelected ? Color.posAccent : Color.posTextSecondary.opacity(0.45))
-                    .frame(width: 30, height: 32)
-
-                Text(sku.name ?? "")
-                    .font(.system(size: 12, weight: isSelected ? .bold : .semibold))
-                    .foregroundColor(Color.posTextPrimary)
-                    .lineLimit(1)
-
-                Spacer()
-
-                Text(CurrencyUtils.formatRp(sku.price))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color.posAccent)
-
-                // Qty badge — total already in the cart for this SKU, across every
-                // customization variant of it.
-                if qty > 0 {
-                    Text("\(qty)")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(Color.posPrimaryDark)
-                        .frame(width: 26, height: 22)
-                        .background(Color.posAccentSoft)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .padding(.leading, 6)
-                }
+    private func optionGrid(_ group: ProductCustomization) -> some View {
+        let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+        return LazyVGrid(columns: columns, spacing: 8) {
+            ForEach(group.sortedOptions) { option in
+                OptionCard(
+                    name: option.nameValue,
+                    priceText: option.price > 0 ? "+\(CurrencyUtils.formatRp(option.price))" : L10n.t("Free"),
+                    selected: selection.isSelected(option.id, in: group.customizationId),
+                    quantity: group.allowsQuantity ? selection.count(of: option.id, in: group.customizationId) : 0,
+                    allowsQuantity: group.allowsQuantity,
+                    canIncrement: selection.canIncrement(option.id, in: group),
+                    onToggle: { selection.select(option.id, in: group) },
+                    onIncrement: { selection.increment(option.id, in: group) },
+                    onDecrement: { selection.decrement(option.id, in: group) }
+                )
             }
-            .padding(.horizontal, 10)
-            .frame(height: 38)
-            .background(isSelected ? Color.posAccentSoft.opacity(0.45) : Color.posRowEven)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.posAccent : Color.posDivider, lineWidth: isSelected ? 1.5 : 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
-        .buttonStyle(.plain)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: qty)
     }
 
-    private func cartQuantity(forSku skuId: Int) -> Int {
-        formVM.activeTab?.items
-            .filter { $0.productId == product.id && $0.skuId == skuId }
-            .reduce(0) { $0 + $1.quantity } ?? 0
-    }
-
-    // MARK: - Customizations
-
-    private var lockedCustomizationHint: some View {
+    private func groupHeader(title: String, hint: String?) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 12))
-                .foregroundColor(Color.posTextSecondary)
-            Text("Select a variant above to choose options")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Color.posTextSecondary)
+            Text(LocalizedStringKey(title))
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.posTextPrimary)
             Spacer()
-            Text("\(groups.count) group\(groups.count == 1 ? "" : "s")")
-                .font(.system(size: 11))
-                .foregroundColor(Color.posTextSecondary.opacity(0.7))
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 40)
-        .background(Color.posBgLight)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .accessibilityElement(children: .combine)
-    }
-
-    private var customizationSections: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(groups) { group in
-                    customizationSection(group)
-                }
-            }
-        }
-        // Defence in depth: the sections only render with a SKU selected, and this
-        // makes an option untappable even if that gating is ever loosened.
-        .disabled(selectedSku == nil)
-    }
-
-    private func customizationSection(_ group: ProductCustomization) -> some View {
-        // The counter tracks distinct options against the min/max option budget;
-        // summed units live on each row's stepper badge instead.
-        let chosenCount = selection.distinctCount(in: group.customizationId)
-        let options = group.sortedOptions
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(group.nameValue)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(Color.posTextPrimary)
-                if group.isRequired {
-                    Text("REQUIRED")
-                        .font(.system(size: 8, weight: .heavy))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(Color.posStatusVoid)
-                        .clipShape(Capsule())
-                }
-                Spacer()
-                if group.allowsMultiple || group.allowsQuantity {
-                    HStack(spacing: 6) {
-                        Text("Pick up to \(group.maxCount)")
-                            .font(.system(size: 10))
-                            .foregroundColor(Color.posTextSecondary)
-                        Text("\(chosenCount)/\(group.maxCount)")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(chosenCount >= group.maxCount ? Color.posAccent : Color.posTextSecondary)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(chosenCount >= group.maxCount ? Color.posAccentSoft : Color.posBgLight)
-                            .clipShape(Capsule())
-                    }
-                }
-            }
-
-            if options.isEmpty {
-                Text("No options available")
-                    .font(.system(size: 11))
-                    .foregroundColor(Color.posTextSecondary)
-                    .padding(6)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .background(Color.posBgLight)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(options) { option in
-                        optionRow(option, group: group)
-                    }
-                }
+            if let hint {
+                Text(hint)
+                    .font(.system(size: 13))
+                    .foregroundColor(.posTextSecondary)
             }
         }
     }
 
-    private func optionRow(_ option: CustomizationOption, group: ProductCustomization) -> some View {
-        let count = selection.count(of: option.id, in: group.customizationId)
-        let isSelected = count > 0
-        // In quantity mode the cap is the summed units against maxSelection; the
-        // `+` goes dead the moment the group budget is spent.
-        let canAddMore = group.allowsQuantity
-            ? selection.canIncrement(option.id, in: group)
-            : false
-
-        // Two sibling controls, not nested: the body selects (radio / checkbox),
-        // and — only when the catalogue allows quantities — the trailing stepper
-        // moves the option by a single unit so it can be ordered more than once.
-        return HStack(spacing: 0) {
-            Button {
-                select(option, group: group)
-            } label: {
-                HStack(spacing: 0) {
-                    // Radio for a single-choice group, checkbox where more can be picked.
-                    Image(systemName: optionIcon(isSelected: isSelected, group: group))
-                        .font(.system(size: 14))
-                        .foregroundColor(isSelected ? Color.posAccent : Color.posTextSecondary.opacity(0.5))
-                        .frame(width: 28, height: 30)
-
-                    Text(option.nameValue)
-                        .font(.system(size: 12, weight: isSelected ? .bold : .regular))
-                        .foregroundColor(Color.posTextPrimary)
-                        .lineLimit(1)
-
-                    if count > 1 {
-                        Text("×\(count)")
-                            .font(.system(size: 11, weight: .heavy))
-                            .foregroundColor(Color.posAccent)
-                            .padding(.leading, 4)
-                    }
-
-                    Spacer()
-
-                    if option.price > 0 {
-                        Text("+\(CurrencyUtils.formatRp(option.price))")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(Color.posAccent)
-                    }
-                }
-                .padding(.leading, 10)
-                .padding(.trailing, group.allowsQuantity ? 4 : 10)
-                .frame(height: 34)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if group.allowsQuantity {
-                quantityStepper(option, group: group, count: count, canAddMore: canAddMore)
-            }
-        }
-        .frame(height: 34)
-        .background(isSelected ? Color.posAccentSoft.opacity(0.4) : Color.posRowOdd)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(isSelected ? Color.posAccent.opacity(0.6) : Color.posDivider, lineWidth: isSelected ? 1.5 : 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+    private func groupHint(_ group: ProductCustomization) -> String {
+        let min = group.minCount
+        let max = group.maxCount
+        if min > 0, group.allowsMultiple, max > min { return L10n.t("Choose %d-%d", min, max) }
+        if min > 0 { return L10n.t("Choose 1") }
+        if group.allowsMultiple, max > 1 { return L10n.t("Choose max %d", max) }
+        return L10n.t("Optional")
     }
 
-    /// A minus / count / plus control for a quantity group. Each tap moves the
-    /// option by one unit; the count never drops below zero and `+` goes dead
-    /// once the summed units reach the group's `maxCount`, which is the same
-    /// budget the menu service enforces.
-    private func quantityStepper(_ option: CustomizationOption, group: ProductCustomization,
-                                 count: Int, canAddMore: Bool) -> some View {
-        HStack(spacing: 3) {
-            if count > 0 {
-                Button {
-                    withAnimation(.spring(response: 0.24, dampingFraction: 0.75)) {
-                        selection.decrement(option.id, in: group)
-                    }
-                    UISelectionFeedbackGenerator().selectionChanged()
-                } label: {
-                    Image(systemName: "minus.circle.fill")
-                        .font(.system(size: 15))
-                        .foregroundColor(Color.posTextSecondary)
-                }
-                .buttonStyle(.plain)
-
-                Text("\(count)")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundColor(Color.posAccent)
-                    .frame(minWidth: 12)
-            }
-
-            Button {
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.75)) {
-                    selection.increment(option.id, in: group)
-                }
-                UISelectionFeedbackGenerator().selectionChanged()
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 15))
-                    .foregroundColor(canAddMore ? Color.posAccent : Color.posAccent.opacity(0.3))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canAddMore)
+    private func chipRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) { content() }
+                .padding(.vertical, 2)
         }
-        .padding(.trailing, 8)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(option.nameValue), \(count) selected")
     }
 
-    private func select(_ option: CustomizationOption, group: ProductCustomization) {
-        withAnimation(.spring(response: 0.24, dampingFraction: 0.75)) { selection.select(option.id, in: group) }
-        UISelectionFeedbackGenerator().selectionChanged()
+    private func chipLabel(_ option: CustomizationOption) -> String {
+        option.price > 0
+            ? "\(option.nameValue) · +\(CurrencyUtils.formatRp(option.price))"
+            : option.nameValue
+    }
+
+    // MARK: - Kitchen note
+
+    private var noteSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            groupHeader(title: "Kitchen note", hint: nil)
+            TextEditor(text: $note)
+                .font(.system(size: 14))
+                .foregroundColor(.posTextPrimary)
+                .frame(minHeight: 64)
+                .padding(8)
+                .background(Color.white)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posDivider, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(alignment: .topLeading) {
+                    if note.isEmpty {
+                        Text("mis. ayam jangan terlalu gosong")
+                            .font(.system(size: 14))
+                            .foregroundColor(.posTextSecondary.opacity(0.6))
+                            .padding(.horizontal, 12).padding(.vertical, 16)
+                            .allowsHitTesting(false)
+                    }
+                }
+        }
     }
 
     // MARK: - Footer
 
-    private func optionIcon(isSelected: Bool, group: ProductCustomization) -> String {
-        if group.allowsMultiple { return isSelected ? "checkmark.square.fill" : "square" }
-        return isSelected ? "largecircle.fill.circle" : "circle"
-    }
-
     private var footer: some View {
-        VStack(spacing: 8) {
-            if !unmet.isEmpty, selectedSku != nil {
-                Text(unmet.map { $0.nameValue }.joined(separator: ", ") + " is required")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color.posStatusVoid)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if pendingSurcharge > 0 {
-                HStack {
-                    Text("Options")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color.posTextSecondary)
-                    Spacer()
-                    Text("+\(CurrencyUtils.formatRp(pendingSurcharge))")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(Color.posAccent)
+        HStack(spacing: 12) {
+            HStack(spacing: 4) {
+                Button {
+                    if quantity > 1 { quantity -= 1; UISelectionFeedbackGenerator().selectionChanged() }
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(quantity > 1 ? .posTextPrimary : .posTextSecondary.opacity(0.4))
+                        .frame(width: 44, height: 44)
+                        .background(Color.posBgLight)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .buttonStyle(.plain)
+                .disabled(quantity <= 1)
+
+                Text("\(quantity)")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.posTextPrimary)
+                    .frame(width: 36)
+
+                Button {
+                    quantity += 1; UISelectionFeedbackGenerator().selectionChanged()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 44, height: 44)
+                        .background(Color.posAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
             }
 
             Button {
-                guard let sku = selectedSku else { return }
-                formVM.addToCart(product: product, sku: sku, customizations: pending)
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                selection = CustomizationSelection()
-                selectedSkuId = skus.count == 1 ? sku.id : nil
-                onClose()
+                addToCart()
             } label: {
-                HStack(spacing: 6) {
-                    Text("Add to Cart")
-                    Text(CurrencyUtils.formatRp(pendingTotal))
-                        .fontWeight(.heavy)
-                }
-                .frame(maxWidth: .infinity)
+                Text(canAdd
+                     ? L10n.t("Add to Order · %@", CurrencyUtils.formatRp(lineTotal))
+                     : L10n.t("Add to Order"))
+                    .font(.system(size: 16, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: 52)
             }
             .buttonStyle(PosButtonStyle(filled: true))
             .disabled(!canAdd)
             .opacity(canAdd ? 1 : 0.4)
-            .animation(.easeOut(duration: 0.15), value: canAdd)
         }
-        .padding(.top, 2)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
-    // MARK: - Helpers
-
-    private var initialSkuId: Int? {
-        skus.count == 1 ? skus.first?.id : nil
-    }
-
-    private func selectDefaultSku() {
-        if selectedSkuId == nil { selectedSkuId = initialSkuId }
+    private func addToCart() {
+        guard let sku = selectedSku else { return }
+        formVM.addToCart(product: product, sku: sku, customizations: pending, quantity: quantity)
+        formVM.setRemark(note)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        onClose()
     }
 }
 
-#Preview {
-    ProductDetailPopup(product: Product(id: 1, name: "Gula Aren", categoryId: 1, skus: [], productImage: nil), onClose: {})
-        .environmentObject(OrderFormViewModel())
-        .padding()
-        .background(Color.black.opacity(0.45))
+// MARK: - Chips + cards
+
+private struct ChoiceChip: View {
+    let text: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(text)
+                .font(.system(size: 14, weight: selected ? .bold : .regular))
+                .foregroundColor(selected ? .white : .posTextPrimary)
+                .padding(.horizontal, 16)
+                .frame(height: 44)
+                .background(selected ? Color.posPrimary : Color.white)
+                .overlay(RoundedRectangle(cornerRadius: 22)
+                    .stroke(selected ? Color.posPrimary : Color.posDivider, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 22))
+        }
+        .buttonStyle(.plain)
+    }
 }
+
+private struct OptionCard: View {
+    let name: String
+    let priceText: String
+    let selected: Bool
+    let quantity: Int
+    let allowsQuantity: Bool
+    let canIncrement: Bool
+    let onToggle: () -> Void
+    let onIncrement: () -> Void
+    let onDecrement: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onToggle) {
+                HStack(spacing: 10) {
+                    Image(systemName: selected ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 20))
+                        .foregroundColor(selected ? .posPrimary : .posTextSecondary.opacity(0.5))
+                    Text(name)
+                        .font(.system(size: 14))
+                        .foregroundColor(.posTextPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if allowsQuantity && selected {
+                HStack(spacing: 4) {
+                    Button(action: onDecrement) {
+                        Image(systemName: "minus.circle.fill").foregroundColor(.posTextSecondary)
+                    }.buttonStyle(.plain)
+                    Text("\(quantity)")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.posPrimary)
+                        .frame(minWidth: 14)
+                    Button(action: onIncrement) {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundColor(canIncrement ? .posPrimary : .posPrimary.opacity(0.3))
+                    }.buttonStyle(.plain).disabled(!canIncrement)
+                }
+            } else {
+                Text(priceText)
+                    .font(.system(size: 12))
+                    .foregroundColor(.posTextSecondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 52)
+        .background(selected ? Color.posAccentSoft : Color.white)
+        .overlay(RoundedRectangle(cornerRadius: 12)
+            .stroke(selected ? Color.posPrimary : Color.posDivider, lineWidth: selected ? 1.5 : 1))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+

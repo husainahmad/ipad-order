@@ -35,7 +35,7 @@ struct ProductCard: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
 
                         HStack(spacing: 4) {
-                            Text(isSoldOut ? "Unavailable" : defaultPrice)
+                            Text(LocalizedStringKey(isSoldOut ? "Unavailable" : defaultPrice))
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(isSoldOut ? .posTextSecondary : .posAccent)
                                 .lineLimit(1)

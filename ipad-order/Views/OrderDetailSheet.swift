@@ -75,13 +75,13 @@ struct OrderDetailSheet: View {
                         Image(systemName: "printer")
                             .font(.system(size: 13))
                             .foregroundColor(.posPrimary)
-                        Text(previewMode.rawValue)
+                        Text(LocalizedStringKey(previewMode.rawValue))
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(.posPrimary)
                         Spacer()
                         Picker("Preview", selection: $previewMode) {
                             ForEach(PreviewMode.allCases, id: \.self) { mode in
-                                Text(mode.rawValue).tag(mode)
+                                Text(LocalizedStringKey(mode.rawValue)).tag(mode)
                             }
                         }
                         .pickerStyle(.segmented)
@@ -163,7 +163,7 @@ struct OrderDetailSheet: View {
                     tab: OrderTab(id: -1, label: ""),
                     existingOrder: order,
                     onSuccess: {
-                        Task { await ordersVM.loadOrders() }
+                        Task { await ordersVM.refresh() }
                         showPayment = false
                         dismiss()
                     },
@@ -184,17 +184,17 @@ struct OrderDetailSheet: View {
 
     // MARK: - Items breakdown with customizations
 
-    /// The choices made on one product line, grouped by their customization and with
-    /// the surcharge each option carried.
-    private func customizationView(_ detail: OrderDetail) -> some View {
+    /// The choices made on one line, grouped by their customization and with the
+    /// surcharge each option carried.
+    private func customizationView(_ groups: [(name: String, items: [OrderDetailSkuCustomization])]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(detail.customizationsByGroup.enumerated()), id: \.offset) { _, group in
+            ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
                 VStack(alignment: .leading, spacing: 3) {
                     if !group.name.isEmpty {
                         Text(group.name.uppercased())
                             .font(.system(size: 10, weight: .heavy))
                             .foregroundColor(.posTextSecondary)
-                            .tracking(0.4)
+                            .posTracking(0.4)
                     }
                     ForEach(Array(group.items.enumerated()), id: \.offset) { _, opt in
                         HStack(spacing: 6) {
@@ -226,7 +226,7 @@ struct OrderDetailSheet: View {
             if let details = order.orderDetails, !details.isEmpty {
                 ForEach(Array(details.enumerated()), id: \.offset) { _, detail in
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(detail.productName ?? "Item")
+                        Text(LocalizedStringKey(detail.productName ?? "Item"))
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(.posPrimary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -254,12 +254,18 @@ struct OrderDetailSheet: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(Color.white)
+                            // The choices belong to this variant, so they sit under it.
+                            let skuGroups = detail.customizations(forSku: sku)
+                            if !skuGroups.isEmpty {
+                                customizationView(skuGroups)
+                            }
                             Divider().opacity(0.5)
                         }
-                        // Choices are stored against the product line, not the SKU, so they
-                        // render once beneath it however many SKUs it carries.
-                        if detail.hasCustomizations {
-                            customizationView(detail)
+                        // Choices stored before the line id was recorded have no variant
+                        // to sit under; show them once for the product instead of losing them.
+                        let unattached = detail.unattachedCustomizationsByGroup
+                        if !unattached.isEmpty {
+                            customizationView(unattached)
                         }
                     }
                     .background(Color.white)
@@ -311,14 +317,14 @@ struct OrderDetailSheet: View {
     }
 
     private func printText(_ text: String) {
-        statusMessage = "Printing..."
+        statusMessage = L10n.t("Printing...")
         PrinterManager.print(text) { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    statusMessage = "Print sent to printer"
+                    statusMessage = L10n.t("Print sent to printer")
                 case .failure(let error):
-                    statusMessage = "Print failed: \(error.localizedDescription)"
+                    statusMessage = L10n.t("Print failed: %@", error.localizedDescription)
                 }
             }
         }
@@ -327,14 +333,14 @@ struct OrderDetailSheet: View {
     private func printKitchenTexts() {
         let texts = PrintUtils.buildKitchenTexts(order)
         guard !texts.isEmpty else {
-            statusMessage = "Nothing to print"
+            statusMessage = L10n.t("Nothing to print")
             return
         }
-        statusMessage = "Printing..."
+        statusMessage = L10n.t("Printing...")
         var index = 0
         func printNext() {
             guard index < texts.count else {
-                statusMessage = "Print sent to printer"
+                statusMessage = L10n.t("Print sent to printer")
                 return
             }
             PrinterManager.print(texts[index]) { result in
@@ -344,7 +350,7 @@ struct OrderDetailSheet: View {
                         index += 1
                         printNext()
                     case .failure(let error):
-                        statusMessage = "Print failed: \(error.localizedDescription)"
+                        statusMessage = L10n.t("Print failed: %@", error.localizedDescription)
                     }
                 }
             }
@@ -358,10 +364,10 @@ struct OrderDetailSheet: View {
             defer { voiding = false }
             let success = await ordersVM.voidOrder(order.id)
             if success {
-                await ordersVM.loadOrders()
+                await ordersVM.refresh()
                 dismiss()
             } else {
-                statusMessage = "Void failed"
+                statusMessage = L10n.t("Void failed")
             }
         }
     }

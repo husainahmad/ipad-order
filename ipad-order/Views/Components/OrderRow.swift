@@ -106,7 +106,7 @@ struct OrderRow: View {
             HStack(spacing: 4) {
                 Image(systemName: order.storeServiceTypesId == 3 ? "takeoutbag.and.cup.and.straw" : "fork.knife")
                     .font(.system(size: 10, weight: .bold))
-                Text(order.storeServiceTypesId == 3 ? "TAKE" : "DINE")
+                Text(LocalizedStringKey(order.storeServiceTypesId == 3 ? "TAKE" : "DINE"))
                     .font(.system(size: 11, weight: .bold))
             }
             .foregroundColor(typeColor)

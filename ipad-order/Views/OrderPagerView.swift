@@ -18,7 +18,7 @@ struct OrderPagerView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .onChange(of: formVM.selectedPage) { newValue in
                 if newValue == 0 {
-                    Task { await ordersVM.loadOrders() }
+                    Task { await ordersVM.refresh() }
                 }
             }
         }
@@ -97,7 +97,7 @@ struct OrderPagerView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(highlighted ? .white : (isSelected ? .white : .posTextSecondary))
 
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(highlighted ? .white : (isSelected ? .white : .posTextPrimary))
 

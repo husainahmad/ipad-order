@@ -12,6 +12,9 @@ struct OrderListContent: View {
     let onRetry: () -> Void
     let onSelect: (Order) -> Void
     let onClearFilters: () -> Void
+    var loadingMore: Bool = false
+    var hasMore: Bool = false
+    var onLoadMore: (() -> Void)? = nil
 
     var body: some View {
         Group {
@@ -42,17 +45,42 @@ struct OrderListContent: View {
                     .buttonStyle(OrderRowButtonStyle())
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(order.orderNoValue), \(order.statusValue), \(CurrencyUtils.formatRp(order.grandTotalValue))")
-                    .accessibilityHint("Tap to view details")
+                    .accessibilityHint(Text(LocalizedStringKey("Tap to view details")))
                     .contextMenu {
                         Button { onSelect(order) } label: { Label("View Detail", systemImage: "eye") }
                         Button { UIPasteboard.general.string = order.orderNoValue } label: { Label("Copy Order No", systemImage: "doc.on.doc") }
                     }
                 }
+                loadMoreRow
             }
             .padding(.vertical, 4)
             .animation(.easeOut(duration: 0.2), value: orders.count)
         }
         .refreshable { onRetry() }
+    }
+
+    /// The bottom of the list: asks for the next page when it scrolls into view.
+    ///
+    /// `onAppear` fires once per row identity, and the row only exists while another page
+    /// does, so it asks exactly once per page. The view model still guards against overlap,
+    /// because the row can reappear if the list is scrolled back and forth quickly.
+    @ViewBuilder
+    private var loadMoreRow: some View {
+        if hasMore {
+            HStack(spacing: 8) {
+                if loadingMore {
+                    ProgressView().scaleEffect(0.8)
+                    Text("Loading more orders...")
+                } else {
+                    Text("Loading more orders")
+                }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.posTextSecondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .onAppear { onLoadMore?() }
+        }
     }
 
     private func skeletonList(width: CGFloat) -> some View {
@@ -100,9 +128,9 @@ struct OrderListContent: View {
                 Image(systemName: searchText.isEmpty && filterActive ? "tray" : "magnifyingglass")
                     .font(.system(size: 28)).foregroundColor(.posAccent)
             }
-            Text(searchText.isEmpty && filterActive ? "No orders yet" : "No matching orders")
+            Text(LocalizedStringKey(searchText.isEmpty && filterActive ? "No orders yet" : "No matching orders"))
                 .font(.system(size: 16, weight: .bold)).foregroundColor(.posTextPrimary)
-            Text(searchText.isEmpty && filterActive ? "Orders for today will appear here" : "Try a different search or filter")
+            Text(LocalizedStringKey(searchText.isEmpty && filterActive ? "Orders for today will appear here" : "Try a different search or filter"))
                 .font(.system(size: 13)).foregroundColor(.posTextSecondary)
             if filterActive {
                 Button("Clear filters") { onClearFilters() }

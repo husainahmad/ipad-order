@@ -46,6 +46,9 @@ struct OrderCustomizationOption: Codable, Hashable {
 struct OrderDetailCustomization: Codable, Hashable {
     let customizationId: Int?
     let customizationName: String?
+    /// The SKU line the choices were made on. Null on orders written before the order
+    /// service started recording it, which can only be attributed to the product line.
+    let orderDetailSkuId: Int?
     let options: [OrderCustomizationOption]?
 
     var customizationNameValue: String {
@@ -108,6 +111,10 @@ struct OrderDetailSkuCustomization: Codable, Hashable {
 }
 
 struct OrderDetailSku: Codable, Hashable {
+    /// The `order_detail_skus` row id. This is what customization groups reference.
+    let id: Int?
+    /// The catalogue SKU id.
+    let skuId: Int?
     let skuName: String?
     let quantity: Double?
     let price: Double?
@@ -116,6 +123,10 @@ struct OrderDetailSku: Codable, Hashable {
     var quantityValue: Double { quantity ?? 0 }
     var priceValue: Double { price ?? 0 }
     var amountValue: Double { amount ?? 0 }
+
+    /// The id a customization group can reference, or `nil` when the response carried
+    /// neither. See `OrderDetail.customizations(forSku:)`.
+    var customizationKey: Int? { id ?? skuId }
 }
 
 struct OrderDetail: Codable, Hashable {
@@ -148,6 +159,50 @@ struct OrderDetail: Codable, Hashable {
         return order.map { (name: $0, items: buckets[$0] ?? []) }
     }
 
+    /// The choices made on one SKU line, grouped the same way.
+    ///
+    /// A product sold as two variants holds one Temperature group per line — Big with
+    /// Hot, Regular with Ice. Rendering every group under the whole product made the
+    /// receipt read as if one cup were both. Groups with no line (orders written before
+    /// the link existed) are left to `customizationsByGroup` so they still show.
+    func customizations(forSku sku: OrderDetailSku) -> [(name: String, items: [OrderDetailSkuCustomization])] {
+        // Matched on the row id, with the catalogue SKU id as a fallback: an order service
+        // build that omits the row id would otherwise leave every line looking uncustomised,
+        // which is worse than matching the wrong variant. Falling back only when exactly one
+        // line carries that SKU keeps two lines of the same variant from sharing choices.
+        let skuId = sku.customizationKey
+        guard let skuId else { return [] }
+        let groups = (customizations ?? []).filter { $0.orderDetailSkuId == skuId }
+        var order: [String] = []
+        var buckets: [String: [OrderDetailSkuCustomization]] = [:]
+        for group in groups {
+            for option in group.items {
+                let flattened = OrderDetailSkuCustomization(group: group, option: option)
+                let key = flattened.customizationNameValue
+                if buckets[key] == nil { order.append(key); buckets[key] = [] }
+                buckets[key]?.append(flattened)
+            }
+        }
+        return order.map { (name: $0, items: buckets[$0] ?? []) }
+    }
+
+    /// Choices that could not be tied to a line, kept for orders written before the
+    /// order service recorded `order_detail_sku_id`.
+    var unattachedCustomizationsByGroup: [(name: String, items: [OrderDetailSkuCustomization])] {
+        let orphans = (customizations ?? []).filter { $0.orderDetailSkuId == nil }
+        var order: [String] = []
+        var buckets: [String: [OrderDetailSkuCustomization]] = [:]
+        for group in orphans {
+            for option in group.items {
+                let flattened = OrderDetailSkuCustomization(group: group, option: option)
+                let key = flattened.customizationNameValue
+                if buckets[key] == nil { order.append(key); buckets[key] = [] }
+                buckets[key]?.append(flattened)
+            }
+        }
+        return order.map { (name: $0, items: buckets[$0] ?? []) }
+    }
+
     /// One line per group, e.g. "Sugar: Less • Milk: Oat".
     var groupedCustomizationNames: String {
         allCustomizations.map { $0.groupedDisplayName }
@@ -156,6 +211,16 @@ struct OrderDetail: Codable, Hashable {
     }
 
     var hasCustomizations: Bool { !allCustomizations.isEmpty }
+}
+
+/// One page of orders plus the cursor for the next one.
+///
+/// The cursor is an order id, not an offset: an offset would repeat a row whenever a sale
+/// was confirmed while the cashier was scrolling. `nextCursor` is nil on the last page.
+struct OrderPageResponse: Decodable {
+    let orders: [Order]
+    let nextCursor: Int?
+    let hasMore: Bool?
 }
 
 struct Order: Codable, Identifiable, Hashable {

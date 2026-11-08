@@ -1,7 +1,274 @@
-/* Receipt - Indonesian (default) */
+/* Receipt */
 "receipt.thank_you" = "Terima kasih";
 "receipt.see_you" = "Sampai jumpa kembali!";
-
 "receipt.header" = "KOPI HARMONI";
-"settings.receiptLanguage" = "Bahasa Struk";
-"settings.receiptLanguage.system" = "Sistem";
+
+/* Brand / login */
+"Kopi Harmoni" = "Kopi Harmoni";
+"Welcome Back" = "Selamat Datang";
+"Sign in to start taking orders" = "Masuk untuk mulai menerima pesanan";
+"Point of Sale · Tablet" = "Point of Sale · Tablet";
+"Username" = "Nama Pengguna";
+"Password" = "Kata Sandi";
+"Login" = "Masuk";
+"Logout" = "Keluar";
+
+/* Common actions */
+"Back" = "Kembali";
+"Cancel" = "Batal";
+"Clear" = "Hapus";
+"Close" = "Tutup";
+"Confirm" = "Konfirmasi";
+"Confirm & Pay" = "Konfirmasi & Bayar";
+"Delete" = "Hapus";
+"Decrease" = "Kurangi";
+"Disconnect" = "Putuskan";
+"Done" = "Selesai";
+"Edit" = "Ubah";
+"Increase" = "Tambah";
+"Pay" = "Bayar";
+"Print" = "Cetak";
+"Refresh" = "Segarkan";
+"Register" = "Daftar";
+"Remove" = "Hapus";
+"Retry" = "Coba Lagi";
+"Saving..." = "Menyimpan...";
+"Save & Select" = "Simpan & Pilih";
+"Save Printer" = "Simpan Printer";
+"Save Server" = "Simpan Server";
+"Stop Scan" = "Hentikan Pindai";
+"Scan for Printers" = "Pindai Printer";
+"Test Print" = "Uji Cetak";
+"Test Unicode (58mm) — JP/CN/KR/AR" = "Uji Unicode (58mm) — JP/CN/KR/AR";
+"Void" = "Batalkan";
+"Back to search" = "Kembali ke pencarian";
+"CLEAR" = "KOSONGKAN";
+"EXACT" = "PAS";
+
+/* Headers / screen titles */
+"Appearance" = "Tampilan";
+"Category" = "Kategori";
+"Daily Report" = "Laporan Harian";
+"Find Customer" = "Cari Pelanggan";
+"New Customer" = "Pelanggan Baru";
+"NEW ORDER" = "PESANAN BARU";
+"Order Detail" = "Detail Pesanan";
+"Order Details" = "Detail Pesanan";
+"Order Summary" = "Ringkasan Pesanan";
+"Order Type" = "Jenis Pesanan";
+"Order Volume" = "Volume Pesanan";
+"Orders" = "Pesanan";
+"Payment" = "Pembayaran";
+"Confirm Order & Payment" = "Konfirmasi Pesanan & Pembayaran";
+"Preview" = "Pratinjau";
+"Receipt Preview" = "Pratinjau Struk";
+"Kitchen Print" = "Cetak Dapur";
+"Kitchen note" = "Catatan untuk dapur";
+"Item" = "Item";
+"Items" = "Item";
+"Sales Report" = "Laporan Penjualan";
+"Settlement" = "Setoran";
+"Settings" = "Pengaturan";
+"Language" = "Bahasa";
+"Server" = "Server";
+"Printer" = "Printer";
+
+/* Field labels */
+"Amount" = "Jumlah";
+"Brand : %@" = "Merek : %@";
+"Cash Received" = "Uang Diterima";
+"Change" = "Kembalian";
+"Customer" = "Pelanggan";
+"Date" = "Tanggal";
+"Discount" = "Diskon";
+"Email (optional)" = "Email (opsional)";
+"Gross Sales" = "Penjualan Kotor";
+"ID %lld" = "ID %lld";
+"Name" = "Nama";
+"Net Sales" = "Penjualan Bersih";
+"Note" = "Catatan";
+"Order" = "Pesanan";
+"Order #%@" = "Pesanan #%@";
+"Product" = "Produk";
+"QTY" = "QTY";
+"Service" = "Layanan";
+"Status" = "Status";
+"Store : %@" = "Toko : %@";
+"Sub Total" = "Subtotal";
+"Total" = "Total";
+"Type" = "Jenis";
+"Rp." = "Rp.";
+"START" = "MULAI";
+"END" = "SELESAI";
+"TOTAL" = "TOTAL";
+"Mobile phone" = "Nomor HP";
+
+/* Values / statuses */
+"All" = "Semua";
+"All Categories" = "Semua Kategori";
+"Cash" = "Tunai";
+"Confirmed" = "Dikonfirmasi";
+"DINE" = "DINE";
+"DINE IN" = "DINE IN";
+"Free" = "Gratis";
+"Optional" = "Opsional";
+"Choose 1" = "Pilih 1";
+"Choose %d-%d" = "Pilih %d-%d";
+"Choose max %d" = "Pilih maks %d";
+"No discount" = "Tanpa diskon";
+"No items" = "Tidak ada item";
+"No notes" = "Tanpa catatan";
+"No phone on file" = "Tidak ada nomor telepon";
+"Paid" = "Lunas";
+"Registered customer" = "Pelanggan terdaftar";
+"Sold Out" = "Habis";
+"TAKE" = "TAKE";
+"TAKE AWAY" = "TAKE AWAY";
+"Unavailable" = "Tidak tersedia";
+"Walk-in" = "Tanpa Nama";
+
+/* Order flow hints */
+"Add to Order" = "Tambah ke Pesanan";
+"Add to Order · %@" = "Tambah ke Pesanan · %@";
+"Add note e.g. less sugar, no ice" = "Tambah catatan mis. kurang gula, tanpa es";
+"Cart is empty" = "Keranjang kosong";
+"Collapse" = "Ciutkan";
+"Discount applied from cart" = "Diskon diterapkan dari keranjang";
+"Done editing %@" = "Selesai mengubah %@";
+"Edit %@" = "Ubah %@";
+"Expand to edit customer, note, discount" = "Buka untuk mengubah pelanggan, catatan, diskon";
+"Loading options..." = "Memuat opsi...";
+"No customer linked — this sale is recorded as a walk-in" = "Tidak ada pelanggan — penjualan dicatat sebagai tanpa nama";
+"Order Summary, tap to view full list" = "Ringkasan Pesanan, ketuk untuk melihat daftar lengkap";
+"Please wait" = "Mohon tunggu";
+"Processing payment..." = "Memproses pembayaran...";
+"Re-confirm to apply changes" = "Konfirmasi ulang untuk menerapkan perubahan";
+"Remove customer" = "Hapus pelanggan";
+"Review your order and choose a payment method" = "Tinjau pesanan dan pilih metode pembayaran";
+"Scan QR Code" = "Pindai Kode QR";
+"Pay by Card" = "Bayar dengan Kartu";
+"Select Payment Method" = "Pilih Metode Pembayaran";
+"Select Variant" = "Pilih Varian";
+"Select a variant above to choose options" = "Pilih varian di atas untuk memilih opsi";
+"Tap a product to start ordering" = "Ketuk produk untuk mulai memesan";
+"Tap card on reader" = "Tempelkan kartu di pembaca";
+"Tap to add" = "Ketuk untuk menambah";
+"Your selected items will appear here" = "Item yang dipilih akan muncul di sini";
+"mis. ayam jangan terlalu gosong" = "mis. ayam jangan terlalu gosong";
+
+/* Order list */
+"Clear filters" = "Hapus filter";
+"Clear search" = "Hapus pencarian";
+"Copy Order No" = "Salin No Pesanan";
+"Loading more orders" = "Memuat pesanan lainnya";
+"Loading more orders..." = "Memuat pesanan lainnya...";
+"No matching orders" = "Tidak ada pesanan yang cocok";
+"No orders yet" = "Belum ada pesanan";
+"Orders for today will appear here" = "Pesanan hari ini akan muncul di sini";
+"Search order, customer" = "Cari pesanan, pelanggan";
+"Searching customers..." = "Mencari pelanggan...";
+"Tap to view details" = "Ketuk untuk melihat detail";
+"Try a different search or filter" = "Coba pencarian atau filter lain";
+"View Detail" = "Lihat Detail";
+"%lld items" = "%lld item";
+"Shows %lld items" = "Menampilkan %lld item";
+"%lld shown • %@ takings" = "%lld ditampilkan • %@ pemasukan";
+
+/* Reports */
+"QTY: %lld" = "QTY: %lld";
+"Gross: %@" = "Kotor: %@";
+"Net: %@" = "Bersih: %@";
+"Discount: %@" = "Diskon: %@";
+"Total Orders" = "Total Pesanan";
+"Peak Time" = "Waktu Sibuk";
+"Non Peak Time" = "Waktu Sepi";
+"Load Report" = "Muat Laporan";
+
+/* Customer picker */
+"Customer name" = "Nama pelanggan";
+"Mobile phone e.g. 0812 3456 7890" = "Nomor HP mis. 0812 3456 7890";
+"0812 3456 7890" = "0812 3456 7890";
+"name@example.com" = "name@example.com";
+"No customer found" = "Pelanggan tidak ditemukan";
+"No one matches %@." = "Tidak ada yang cocok dengan %@.";
+"that number" = "nomor itu";
+"Register new customer" = "Daftarkan pelanggan baru";
+"Register before taking the order" = "Daftar sebelum menerima pesanan";
+"Search an existing customer by phone or register a new one" = "Cari pelanggan lewat nomor HP atau daftarkan yang baru";
+"Search by mobile phone" = "Cari dengan nomor HP";
+"Search by phone" = "Cari dengan nomor telepon";
+"Search failed" = "Pencarian gagal";
+"Search or register" = "Cari atau daftar";
+"Search or register customer" = "Cari atau daftar pelanggan";
+"Type a mobile number to find an existing customer, or register a new one." = "Ketik nomor HP untuk menemukan pelanggan, atau daftarkan yang baru.";
+"Name is required" = "Nama wajib diisi";
+"Enter a valid phone number (5–30 digits)" = "Masukkan nomor HP yang valid (5–30 digit)";
+"Request failed: HTTP %d" = "Permintaan gagal: HTTP %d";
+
+/* Settings / server / printer */
+"Address (IP)" = "Alamat (IP)";
+"Host (e.g. 103.150.197.7)" = "Host (mis. 103.150.197.7)";
+"Port (default 8080)" = "Port (bawaan 8080)";
+"Port (network, default 9100)" = "Port (jaringan, bawaan 9100)";
+"Bluetooth" = "Bluetooth";
+"Network" = "Jaringan";
+"Scanning for printers..." = "Memindai printer...";
+"Unknown printer" = "Printer tidak dikenal";
+"Café: Warm Harmoni palette for Coffee & Restaurant POS. Light is default." = "Kafe: Palet Harmoni hangat untuk POS Kopi & Restoran. Mode Terang adalah bawaan.";
+"Bluetooth mode works with ESC/POS thermal printers that expose a BLE service (e.g. VSC TM-58D PRO). SM58 prints Unicode via iPad raster (GS v 0)." = "Mode Bluetooth bekerja dengan printer thermal ESC/POS yang menyediakan layanan BLE (mis. VSC TM-58D PRO). SM58 mencetak Unicode lewat raster iPad (GS v 0).";
+"On iPad, only network (TCP/IP) ESC/POS thermal printers are supported. Unicode via hybrid raster works for 58mm SM58." = "Di iPad, hanya printer thermal ESC/POS jaringan (TCP/IP) yang didukung. Unicode melalui raster hibrida berfungsi untuk SM58 58mm.";
+"Bluetooth ready" = "Bluetooth siap";
+"Bluetooth ready - scan to pair" = "Bluetooth siap - pindai untuk memasangkan";
+"Bluetooth is off. Turn it on in Settings." = "Bluetooth mati. Nyalakan di Pengaturan.";
+"Bluetooth access denied. Allow in Settings > Privacy." = "Akses Bluetooth ditolak. Izinkan di Pengaturan > Privasi.";
+"Bluetooth is not supported on this device." = "Bluetooth tidak didukung di perangkat ini.";
+"Bluetooth unavailable" = "Bluetooth tidak tersedia";
+"Saved. Server: %@" = "Tersimpan. Server: %@";
+"Bluetooth printer saved" = "Printer Bluetooth tersimpan";
+"Printer saved: network" = "Printer tersimpan: jaringan";
+"Connecting to %@..." = "Menghubungkan ke %@...";
+"Connected to %@" = "Terhubung ke %@";
+"Connecting... (make sure printer is on)" = "Menghubungkan... (pastikan printer menyala)";
+"Printing Unicode test..." = "Mencetak uji Unicode...";
+"Unicode test sent (58mm raster for JP/CN/KR/AR)" = "Uji Unicode terkirim (raster 58mm untuk JP/CN/KR/AR)";
+
+/* Theme */
+"Light" = "Terang";
+"Dark" = "Gelap";
+"System" = "Sistem";
+"Café" = "Kafe";
+"Clean" = "Bersih";
+"Espresso" = "Espresso";
+"Auto" = "Otomatis";
+"Harmoni" = "Harmoni";
+"English" = "Inggris";
+"Bahasa Indonesia" = "Bahasa Indonesia";
+
+/* Output / toast messages */
+"Insufficient cash entered!" = "Uang tunai kurang!";
+"Kitchen ticket sent" = "Tiket dapur terkirim";
+"No confirmed order" = "Tidak ada pesanan terkonfirmasi";
+"No confirmed order to pay" = "Tidak ada pesanan terkonfirmasi untuk dibayar";
+"Nothing to print" = "Tidak ada yang perlu dicetak";
+"Payment failed: %@" = "Pembayaran gagal: %@";
+"Payment successful" = "Pembayaran berhasil";
+"Print failed: %@" = "Cetak gagal: %@";
+"Print sent successfully" = "Cetak berhasil dikirim";
+"Print sent to printer" = "Cetak dikirim ke printer";
+"Printing..." = "Mencetak...";
+"Network error: %@" = "Kesalahan jaringan: %@";
+"Failed to load more: %@" = "Gagal memuat lainnya: %@";
+"Failed to load orders: HTTP %d" = "Gagal memuat pesanan: HTTP %d";
+"Failed to load report: HTTP %d" = "Gagal memuat laporan: HTTP %d";
+"Login failed" = "Login gagal";
+"Login failed: HTTP %d" = "Login gagal: HTTP %d";
+"Confirm order failed: HTTP %d" = "Konfirmasi pesanan gagal: HTTP %d";
+"Unicode print failed: %@" = "Cetak Unicode gagal: %@";
+"Void failed" = "Pembatalan gagal";
+"Could not confirm the updated order" = "Tidak dapat mengonfirmasi pesanan yang diperbarui";
+
+/* Dialogs */
+"Close order" = "Tutup pesanan";
+"Close this order? This will remove the order." = "Tutup pesanan ini? Pesanan akan dihapus.";
+"Void order?" = "Batalkan pesanan?";
+"The app and printed receipts use this language." = "Aplikasi dan struk cetak menggunakan bahasa ini.";

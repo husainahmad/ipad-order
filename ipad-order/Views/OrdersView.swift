@@ -92,9 +92,12 @@ struct OrdersView: View {
                     searchText: searchText,
                     filterActive: selectedFilter != .all || !searchText.isEmpty,
                     width: geo.size.width,
-                    onRetry: { Task { await ordersVM.loadOrders() } },
+                    onRetry: { Task { await ordersVM.refresh() } },
                     onSelect: { selectedOrder = $0 },
-                    onClearFilters: { selectedFilter = .all; searchText = "" }
+                    onClearFilters: { selectedFilter = .all; searchText = "" },
+                    loadingMore: ordersVM.loadingMore,
+                    hasMore: ordersVM.hasMore,
+                    onLoadMore: { Task { await ordersVM.loadMore() } }
                 )
                 footerButtons
             }
@@ -130,7 +133,7 @@ struct OrdersView: View {
                     Text("Orders")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.white)
-                    Text("\(filteredOrders.count) shown • \(CurrencyUtils.formatRp(todaysTotal)) takings")
+                    Text(L10n.t("%lld shown • %@ takings", filteredOrders.count, CurrencyUtils.formatRp(todaysTotal)))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.white.opacity(0.85))
                         .lineLimit(1)
@@ -173,9 +176,10 @@ struct OrdersView: View {
         HStack(spacing: 0) {
             Color.clear.frame(width: 4)
             ForEach(columns, id: \.title) { col in
-                Text(col.title.uppercased())
+                Text(LocalizedStringKey(col.title))
+                    .textCase(.uppercase)
                     .font(.system(size: 11, weight: .bold))
-                    .tracking(0.4)
+                    .posTracking(0.4)
                     .foregroundColor(.posTextSecondary)
                     .frame(maxWidth: .infinity, alignment: col.alignment)
                     .frame(width: rel(col.weight, width: width))
@@ -197,7 +201,7 @@ struct OrdersView: View {
             footerButton("Settlement", icon: "banknote.fill", color: .posPrimary) { loadSettlement() }
             Divider().frame(height: 28).opacity(0.4)
             footerButton("Refresh", icon: "arrow.clockwise", color: .posTextPrimary, filled: false) {
-                Task { await ordersVM.loadOrders() }
+                Task { await ordersVM.refresh() }
             }
             footerButton("Settings", icon: "gearshape.fill", color: .posTextPrimary, filled: false) { showSettings = true }
             Spacer().frame(width: 4)
@@ -224,7 +228,7 @@ struct OrdersView: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundColor(filled ? .white : color)
-                Text(title).font(.system(size: 12, weight: .semibold)).foregroundColor(filled ? .white : .posTextPrimary).lineLimit(1)
+                Text(LocalizedStringKey(title)).font(.system(size: 12, weight: .semibold)).foregroundColor(filled ? .white : .posTextPrimary).lineLimit(1)
             }
             .padding(.horizontal, 12).frame(height: 44)
             .background(filled ? AnyShapeStyle(Color.posPrimaryGradient) : AnyShapeStyle(Color.posRowEven))

@@ -3,6 +3,11 @@ import Foundation
 enum ApiError: LocalizedError {
     case invalidResponse
     case http(Int)
+    /// A rejection that came with a human-readable explanation, e.g. the customer
+    /// service's `DUPLICATE_CUSTOMER`. Prefer this over `http` whenever the body
+    /// carries a message, so the teller sees "Phone already registered" rather
+    /// than "HTTP 409".
+    case server(code: String?, message: String)
     case network(String)
     case notAuthenticated
 
@@ -10,6 +15,7 @@ enum ApiError: LocalizedError {
         switch self {
         case .invalidResponse: return "Invalid server response"
         case .http(let code): return "HTTP \(code)"
+        case .server(_, let message): return message
         case .network(let message): return "Network error: \(message)"
         case .notAuthenticated: return "Not authenticated"
         }
@@ -56,6 +62,24 @@ final class APIClient {
         return response.data ?? []
     }
 
+    /// One cursor page of a category's products with the operator's tier pricing.
+    ///
+    /// `beforeId` is the cursor the previous page returned. Paging on an id rather than
+    /// an offset means a product inserted between two requests cannot make the next page
+    /// repeat a row the cashier has already seen.
+    func productsByCategoryPage(_ categoryId: Int, limit: Int = 50,
+                                beforeId: Int? = nil) async throws -> ProductPageResponse {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let beforeId {
+            query.append(URLQueryItem(name: "beforeId", value: String(beforeId)))
+        }
+        let response: ApiResponse<ProductPageResponse> = try await send(
+            method: "GET", base: ConfigManager.baseMenu,
+            path: "api/v1/product/category/\(categoryId)/price/page", query: query)
+        guard let page = response.data else { throw ApiError.invalidResponse }
+        return page
+    }
+
     func getUser(username: String) async throws -> User {
         let response: ApiResponse<User> = try await send(
             method: "GET", base: ConfigManager.baseMenu,
@@ -73,12 +97,50 @@ final class APIClient {
         return response.data ?? []
     }
 
+    // MARK: - Customers
+
+    /// Searches customers by free text. The service matches name, phone and email, so
+    /// a phone number typed at the till finds the customer without a dedicated
+    /// phone-only endpoint.
+    func searchCustomers(_ search: String, page: Int = 0, size: Int = 20) async throws -> CustomerPage {
+        let query = [
+            URLQueryItem(name: "search", value: search),
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "size", value: String(size))
+        ]
+        return try await send(method: "GET", base: ConfigManager.baseCustomer,
+                              path: "api/v1/customers", query: query)
+    }
+
+    func createCustomer(_ request: CreateCustomerRequest) async throws -> Customer {
+        let body = try JSONEncoder().encode(request)
+        return try await send(method: "POST", base: ConfigManager.baseCustomer,
+                              path: "api/v1/customers", body: body)
+    }
+
     // MARK: - Orders
 
     func dailyOrders() async throws -> [Order] {
         let response: ApiResponse<[Order]> = try await send(
             method: "GET", base: ConfigManager.baseOrder, path: "api/v1/order")
         return response.data ?? []
+    }
+
+    /// One page of today's orders, newest first.
+    ///
+    /// `beforeId` is the cursor the previous page returned. Paging on an id rather than an
+    /// offset means a sale confirmed between two requests cannot make the next page repeat
+    /// a row the cashier has already seen.
+    func dailyOrdersPage(limit: Int = 50, beforeId: Int? = nil) async throws -> OrderPageResponse {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let beforeId {
+            query.append(URLQueryItem(name: "beforeId", value: String(beforeId)))
+        }
+        let response: ApiResponse<OrderPageResponse> = try await send(
+            method: "GET", base: ConfigManager.baseOrder,
+            path: "api/v1/order/page", query: query)
+        guard let page = response.data else { throw ApiError.invalidResponse }
+        return page
     }
 
     func confirmOrder(_ request: OrderRequest, idempotencyKey: String? = nil) async throws -> Order {
@@ -200,9 +262,12 @@ final class APIClient {
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 403 {
-                // No retry for permission-denied without auth context
-                throw ApiError.http(http.statusCode)
+            // The services answer failures with a stable error envelope. Surfacing
+            // its message is the difference between "Phone already registered" and
+            // an opaque status code at the counter.
+            if let body = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
+               let message = body.message, !message.isEmpty {
+                throw ApiError.server(code: body.code, message: message)
             }
             throw ApiError.http(http.statusCode)
         }
@@ -258,3 +323,11 @@ private actor RefreshGate {
 }
 
 struct EmptyData: Decodable {}
+
+/// The error envelope every Harmoni service answers with. Only the fields the app
+/// actually shows are decoded; `fieldErrors` is not needed for a counter message.
+struct ServerErrorBody: Decodable {
+    let code: String?
+    let message: String?
+}
+

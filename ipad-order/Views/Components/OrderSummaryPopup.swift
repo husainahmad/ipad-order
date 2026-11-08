@@ -23,7 +23,7 @@ struct OrderSummaryPopup: View {
                 Image(systemName: "cart.fill").font(.system(size: 14)).foregroundColor(.white)
                 Text("Order Summary").font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                 Spacer()
-                Text("\(tab.items.reduce(0){$0+$1.quantity}) items").font(.system(size: 12, weight: .bold)).foregroundColor(.white.opacity(0.9))
+                Text(L10n.t("%lld items", tab.items.reduce(0){$0+$1.quantity})).font(.system(size: 12, weight: .bold)).foregroundColor(.white.opacity(0.9))
                     .padding(.horizontal, 10).padding(.vertical, 5).background(Color.white.opacity(0.15)).clipShape(Capsule())
                 Button { onClose() } label: {
                     Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
@@ -40,7 +40,7 @@ struct OrderSummaryPopup: View {
                                 Image(systemName: "circle.fill").font(.system(size: 6)).foregroundColor(.posAccent)
                                 Text(group.productName).font(.system(size: 13, weight: .bold)).foregroundColor(.posTextPrimary)
                                 Spacer()
-                                Text("\(group.items.reduce(0){$0+$1.quantity}) items").font(.system(size: 11)).foregroundColor(.posTextSecondary)
+                                Text(L10n.t("%lld items", group.items.reduce(0){$0+$1.quantity})).font(.system(size: 11)).foregroundColor(.posTextSecondary)
                             }
                             .padding(.horizontal, 12).padding(.vertical, 8).background(Color.posAccentSoft)
                             ForEach(group.items) { item in

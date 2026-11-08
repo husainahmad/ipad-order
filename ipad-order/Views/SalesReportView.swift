@@ -149,7 +149,7 @@ struct SalesReportView: View {
     }
 
     private func colHeader(_ title: String, _ width: CGFloat) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(.system(size: 13, weight: .bold))
             .foregroundColor(.posTextPrimary)
             .frame(width: width, alignment: .leading)
@@ -182,7 +182,7 @@ struct SalesReportView: View {
                 .padding(.vertical, 6)
                 .background(Color.posAccent)
                 .clipShape(Capsule())
-            Text("QTY: \(totals.qty)")
+            Text(L10n.t("QTY: %lld", totals.qty))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.posTextPrimary)
             Text("Gross: \(CurrencyUtils.formatRp(totals.gross))")

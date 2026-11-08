@@ -9,6 +9,7 @@ struct OrderFormView: View {
     @State private var showConfirm = false
     @State private var showOrderDetails = false
     @State private var showSummary = false
+    @State private var showCustomerPicker = false
     @State private var confirmingOrder = false
 
     private let repository = MenuRepository()
@@ -47,11 +48,23 @@ struct OrderFormView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
                 .zIndex(3)
             }
+
+            if showCustomerPicker {
+                Color.black.opacity(0.45).ignoresSafeArea().transition(.opacity)
+                    .onTapGesture { showCustomerPicker = false }
+                CustomerPickerPopup(tab: tab,
+                                    onSelect: { formVM.selectCustomer($0) },
+                                    onClear: { formVM.clearCustomer() },
+                                    onClose: { showCustomerPicker = false })
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                    .zIndex(4)
+            }
         }
         .dismissKeyboardOnTap()
         .animation(.easeOut(duration: 0.2), value: selectedProduct != nil)
         .animation(.easeOut(duration: 0.2), value: showConfirm)
         .animation(.easeOut(duration: 0.2), value: showSummary)
+        .animation(.easeOut(duration: 0.2), value: showCustomerPicker)
         .task { await loadCategories() }
     }
 
@@ -105,8 +118,8 @@ struct OrderFormView: View {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 2).fill(Color.posAccent).frame(width: 4, height: 20)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(selectedCategoryName).font(.system(size: 17, weight: .bold)).foregroundColor(.posTextPrimary)
-                    Text("\(tab.products.count) items").font(.system(size: 12)).foregroundColor(.posTextSecondary)
+                    Text(LocalizedStringKey(selectedCategoryName)).font(.system(size: 17, weight: .bold)).foregroundColor(.posTextPrimary)
+                    Text(L10n.t("%lld items", tab.products.count)).font(.system(size: 12)).foregroundColor(.posTextSecondary)
                 }
                 Spacer()
                 Image(systemName: "cup.and.saucer.fill").font(.system(size: 15)).foregroundColor(.posAccent)
@@ -131,8 +144,17 @@ struct OrderFormView: View {
                     LazyVGrid(columns: columns, spacing: 10) {
                         ForEach(tab.products) { product in
                             ProductCard(product: product) { handleProductTap(product) }
+                                .onAppear {
+                                    // Bottom sentinel: the last few cards trigger the next page.
+                                    if product.id == tab.products.suffix(6).first?.id {
+                                        Task { await loadMoreProducts() }
+                                    }
+                                }
                         }
                     }.padding(10)
+                    if tab.loadingMoreProducts {
+                        ProgressView().padding(.bottom, 12)
+                    }
                 }
             }
         }
@@ -157,7 +179,7 @@ struct OrderFormView: View {
     private var cartColumn: some View {
         VStack(spacing: 0) {
             Button {
-                guard !tab.items.isEmpty else { toastManager.show("Cart is empty", style: .info); return }
+                guard !tab.items.isEmpty else { toastManager.show(L10n.t("Cart is empty"), style: .info); return }
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 showSummary = true
             } label: {
@@ -177,8 +199,10 @@ struct OrderFormView: View {
                 .background(Color.posPrimaryGradient).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Order Summary, tap to view full list")
-            .accessibilityHint(tab.items.isEmpty ? "Cart is empty" : "Shows \(totalItemCount) items")
+            .accessibilityLabel(Text(LocalizedStringKey("Order Summary, tap to view full list")))
+            .accessibilityHint(tab.items.isEmpty
+                ? Text(LocalizedStringKey("Cart is empty"))
+                : Text(L10n.t("Shows %lld items", totalItemCount)))
 
             serviceTypeSelector
 
@@ -203,7 +227,7 @@ struct OrderFormView: View {
                                     Image(systemName: "circle.fill").font(.system(size: 6)).foregroundColor(.posAccent)
                                     Text(group.productName).font(.system(size: 14, weight: .bold)).foregroundColor(.posTextPrimary)
                                     Spacer()
-                                    Text("\(group.items.reduce(0){$0+$1.quantity}) items").font(.system(size: 11, weight: .medium)).foregroundColor(.posTextSecondary)
+                                    Text(L10n.t("%lld items", group.items.reduce(0){$0+$1.quantity})).font(.system(size: 11, weight: .medium)).foregroundColor(.posTextSecondary)
                                 }
                                 .padding(.horizontal, 12).padding(.vertical, 8).background(Color.posAccentSoft)
 
@@ -263,19 +287,66 @@ struct OrderFormView: View {
                 .padding(.horizontal, 12).frame(height: 44).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Order Details")
-            .accessibilityHint(showOrderDetails ? "Collapse" : "Expand to edit customer, note, discount")
+            .accessibilityLabel(Text(LocalizedStringKey("Order Details")))
+            .accessibilityHint(showOrderDetails
+                ? Text(LocalizedStringKey("Collapse"))
+                : Text(LocalizedStringKey("Expand to edit customer, note, discount")))
 
             if showOrderDetails {
                 VStack(spacing: 10) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "person.fill").font(.system(size: 13)).foregroundColor(.posTextSecondary)
-                        TextField("Customer name (e.g. Budi)", text: $tab.customer)
-                            .font(.system(size: 13)).foregroundColor(.posTextPrimary).tint(.posAccent).submitLabel(.next)
-                        if !tab.customer.isEmpty { Button { tab.customer = "" } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundColor(.posTextSecondary) }.buttonStyle(.plain) }
+                    // Customer is picked, not typed: only a registered customer carries
+                    // the id the order needs, so the field opens the search dialog.
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        showCustomerPicker = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: tab.customerRecord == nil ? "person.badge.plus" : "person.fill.checkmark")
+                                .font(.system(size: 13))
+                                .foregroundColor(tab.customerRecord == nil ? .posTextSecondary : .posAccent)
+                            VStack(alignment: .leading, spacing: 1) {
+                                if let record = tab.customerRecord {
+                                    Text(record.displayName)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.posTextPrimary)
+                                        .lineLimit(1)
+                                    Text(LocalizedStringKey(record.phoneValue.isEmpty ? "Registered customer" : record.phoneValue))
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.posTextSecondary)
+                                        .lineLimit(1)
+                                } else {
+                                    Text("Search or register customer")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.posTextSecondary)
+                                }
+                            }
+                            Spacer()
+                            if tab.customerRecord != nil {
+                                Button {
+                                    formVM.clearCustomer()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.posTextSecondary)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(Text(LocalizedStringKey("Remove customer")))
+                            }
+                            Text("Walk-in")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.posTextSecondary)
+                                .opacity(tab.customerRecord == nil ? 1 : 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 44)
+                        .background(Color.posRowEven)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(tab.customerRecord == nil ? Color.posOutlineVariant : Color.posAccent.opacity(0.6), lineWidth: tab.customerRecord == nil ? 1 : 1.5))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 12).frame(height: 44).background(Color.posRowEven)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.posOutlineVariant, lineWidth: 1)).clipShape(RoundedRectangle(cornerRadius: 10))
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text(LocalizedStringKey("Customer")))
+                    .accessibilityHint(Text(LocalizedStringKey("Search an existing customer by phone or register a new one")))
 
                     HStack(spacing: 8) {
                         Image(systemName: "note.text").font(.system(size: 13)).foregroundColor(.posTextSecondary)
@@ -291,7 +362,7 @@ struct OrderFormView: View {
                             Image(systemName: "tag.fill").font(.system(size: 11)).foregroundColor(.posAccent)
                             Text("Discount").font(.system(size: 12, weight: .semibold)).foregroundColor(.posTextSecondary)
                             Spacer()
-                            Text(discountValue > 0 ? CurrencyUtils.formatRp(discountValue) : "No discount").font(.system(size: 12, weight: .bold)).foregroundColor(discountValue > 0 ? .posStatusVoid : .posTextSecondary)
+                            Text(LocalizedStringKey(discountValue > 0 ? CurrencyUtils.formatRp(discountValue) : "No discount")).font(.system(size: 12, weight: .bold)).foregroundColor(discountValue > 0 ? .posStatusVoid : .posTextSecondary)
                         }
                         HStack(spacing: 8) {
                             Text("Rp.").font(.system(size: 13, weight: .semibold)).foregroundColor(.posTextSecondary)
@@ -380,7 +451,7 @@ struct OrderFormView: View {
         return Button { formVM.setStoreServiceType(id) } label: {
             HStack(spacing: 8) {
                 Image(systemName: icon).font(.system(size: 15)).foregroundColor(selected ? .posAccent : .posGrayButton)
-                Text(title).font(.system(size: 14, weight: selected ? .bold : .regular)).foregroundColor(selected ? .posTextPrimary : .posTextSecondary)
+                Text(LocalizedStringKey(title)).font(.system(size: 14, weight: selected ? .bold : .regular)).foregroundColor(selected ? .posTextPrimary : .posTextSecondary)
                 Spacer()
                 if selected { Image(systemName: "checkmark.circle.fill").font(.system(size: 15)).foregroundColor(.posAccent) }
             }
@@ -443,23 +514,55 @@ struct OrderFormView: View {
 
     private func loadProducts(categoryId: Int) async {
         tab.loadingProducts = true
+        tab.productsNextCursor = nil
+        tab.productsHasMore = true
         defer { tab.loadingProducts = false }
-        do { tab.products = try await repository.getProducts(categoryId: categoryId) }
-        catch { let msg = error.localizedDescription; tab.error = msg; toastManager.show(msg, style: .error) }
+        do {
+            let page = try await repository.getProductsPage(categoryId: categoryId)
+            guard tab.selectedCategoryId == categoryId else { return }
+            tab.products = page.products
+            tab.productsNextCursor = page.nextCursor
+            tab.productsHasMore = page.hasMore ?? (page.nextCursor != nil)
+        } catch {
+            let msg = error.localizedDescription; tab.error = msg; toastManager.show(msg, style: .error)
+        }
+    }
+
+    /// Appends the next page of products. A no-op at the end of the list or while a
+    /// page is already in flight, since the bottom sentinel reappears on every scroll.
+    private func loadMoreProducts() async {
+        guard let categoryId = tab.selectedCategoryId,
+              tab.productsHasMore,
+              !tab.loadingMoreProducts,
+              !tab.loadingProducts,
+              let cursor = tab.productsNextCursor else { return }
+        tab.loadingMoreProducts = true
+        defer { tab.loadingMoreProducts = false }
+        do {
+            let page = try await repository.getProductsPage(categoryId: categoryId, beforeId: cursor)
+            guard tab.selectedCategoryId == categoryId else { return }
+            let known = Set(tab.products.map(\.id))
+            tab.products.append(contentsOf: page.products.filter { !known.contains($0.id) })
+            tab.productsNextCursor = page.nextCursor
+            tab.productsHasMore = page.hasMore ?? (page.nextCursor != nil)
+        } catch {
+            // Leave the cursor unadvanced so scrolling again retries.
+            tab.error = L10n.t("Failed to load more: %@", error.localizedDescription)
+        }
     }
 
     private func printKitchen() {
-        guard !tab.items.isEmpty else { toastManager.show("Cart is empty", style: .info); return }
+        guard !tab.items.isEmpty else { toastManager.show(L10n.t("Cart is empty"), style: .info); return }
         let texts = buildKitchenTexts()
         guard !texts.isEmpty else { return }
         var index = 0
         func printNext() {
-            guard index < texts.count else { toastManager.show("Kitchen ticket sent", style: .success); return }
+            guard index < texts.count else { toastManager.show(L10n.t("Kitchen ticket sent"), style: .success); return }
             PrinterManager.print(texts[index]) { result in
                 DispatchQueue.main.async {
                     switch result {
                     case .success: index += 1; printNext()
-                    case .failure(let e): toastManager.show("Print failed: \(e.localizedDescription)", style: .error)
+                    case .failure(let e): toastManager.show(L10n.t("Print failed: %@", e.localizedDescription), style: .error)
                     }
                 }
             }

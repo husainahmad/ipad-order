@@ -39,12 +39,12 @@ struct SettlementSheet: View {
         .padding(16).background(Color.posBgLight).frame(minWidth: 560, minHeight: 440)
     }
     private func printSettlement() {
-        printStatus = "Printing..."
+        printStatus = L10n.t("Printing...")
         PrinterManager.print(PrintUtils.buildSettlementPrintText(settlement)) { result in
             DispatchQueue.main.async {
                 switch result {
-                case .success: printStatus = "Print sent to printer"
-                case .failure(let e): printStatus = "Print failed: \(e.localizedDescription)"
+                case .success: printStatus = L10n.t("Print sent to printer")
+                case .failure(let e): printStatus = L10n.t("Print failed: %@", e.localizedDescription)
                 }
             }
         }

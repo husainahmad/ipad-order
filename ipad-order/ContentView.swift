@@ -6,6 +6,7 @@ struct ContentView: View {
     @StateObject private var ordersVM = OrdersViewModel()
     @StateObject private var themeManager = ThemeManager()
     @StateObject private var toastManager = ToastManager()
+    @AppStorage("app_language") private var appLanguage = AppLanguage.system
 
     var body: some View {
         Group {
@@ -24,6 +25,8 @@ struct ContentView: View {
         .toast(manager: toastManager)
         .dismissKeyboardOnTap()
         .preferredColorScheme(themeManager.colorScheme)
+        .environment(\.locale, contentLocale)
+        .id(contentLocale.identifier)
         .environmentObject(themeManager)
         .environmentObject(toastManager)
         .onChange(of: session.isLoggedIn) { loggedIn in
@@ -31,6 +34,11 @@ struct ContentView: View {
                 orderFormVM.reset()
             }
         }
+    }
+
+    private var contentLocale: Locale {
+        if appLanguage == AppLanguage.system { return AppLanguage.locale }
+        return Locale(identifier: appLanguage)
     }
 }
 

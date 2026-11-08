@@ -47,7 +47,7 @@ struct CartRow: View {
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
             .buttonStyle(.plain)
-            .accessibilityLabel(isSingle ? "Delete" : "Decrease")
+            .accessibilityLabel(Text(LocalizedStringKey(isSingle ? "Delete" : "Decrease")))
 
             Text("\(item.quantity)")
                 .font(.system(size: 13, weight: .bold))
@@ -67,7 +67,7 @@ struct CartRow: View {
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
             .buttonStyle(.plain)
-            .accessibilityLabel("Increase")
+            .accessibilityLabel(Text(LocalizedStringKey("Increase")))
 
             Text(CurrencyUtils.formatRp(item.lineTotal))
                 .font(.system(size: 12, weight: .bold))
@@ -88,7 +88,7 @@ struct CartRow: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .buttonStyle(.plain)
-                .accessibilityLabel("Remove")
+                .accessibilityLabel(Text(LocalizedStringKey("Remove")))
             } else {
                 Color.clear.frame(width: 44, height: 44)
             }

@@ -1,10 +1,276 @@
-/* Receipt - English */
+/* Receipt */
 "receipt.thank_you" = "Thank you";
 "receipt.see_you" = "See you again!";
-
-/* Receipt header (optional) */
 "receipt.header" = "KOPI HARMONI";
 
-/* Settings */
-"settings.receiptLanguage" = "Receipt Language";
-"settings.receiptLanguage.system" = "System";
+/* Screen labels (English source strings — kept explicit so lookups are stable) */
+
+/* Brand / login */
+"Kopi Harmoni" = "Kopi Harmoni";
+"Welcome Back" = "Welcome Back";
+"Sign in to start taking orders" = "Sign in to start taking orders";
+"Point of Sale · Tablet" = "Point of Sale · Tablet";
+"Username" = "Username";
+"Password" = "Password";
+"Login" = "Login";
+"Logout" = "Logout";
+
+/* Common actions */
+"Back" = "Back";
+"Cancel" = "Cancel";
+"Clear" = "Clear";
+"Close" = "Close";
+"Confirm" = "Confirm";
+"Confirm & Pay" = "Confirm & Pay";
+"Delete" = "Delete";
+"Decrease" = "Decrease";
+"Disconnect" = "Disconnect";
+"Done" = "Done";
+"Edit" = "Edit";
+"Increase" = "Increase";
+"Pay" = "Pay";
+"Print" = "Print";
+"Refresh" = "Refresh";
+"Register" = "Register";
+"Remove" = "Remove";
+"Retry" = "Retry";
+"Saving..." = "Saving...";
+"Save & Select" = "Save & Select";
+"Save Printer" = "Save Printer";
+"Save Server" = "Save Server";
+"Stop Scan" = "Stop Scan";
+"Scan for Printers" = "Scan for Printers";
+"Test Print" = "Test Print";
+"Test Unicode (58mm) — JP/CN/KR/AR" = "Test Unicode (58mm) — JP/CN/KR/AR";
+"Void" = "Void";
+"Back to search" = "Back to search";
+"CLEAR" = "CLEAR";
+"EXACT" = "EXACT";
+
+/* Headers / screen titles */
+"Appearance" = "Appearance";
+"Category" = "Category";
+"Daily Report" = "Daily Report";
+"Find Customer" = "Find Customer";
+"New Customer" = "New Customer";
+"NEW ORDER" = "NEW ORDER";
+"Order Detail" = "Order Detail";
+"Order Details" = "Order Details";
+"Order Summary" = "Order Summary";
+"Order Type" = "Order Type";
+"Order Volume" = "Order Volume";
+"Orders" = "Orders";
+"Payment" = "Payment";
+"Confirm Order & Payment" = "Confirm Order & Payment";
+"Preview" = "Preview";
+"Receipt Preview" = "Receipt Preview";
+"Kitchen Print" = "Kitchen Print";
+"Kitchen note" = "Kitchen note";
+"Item" = "Item";
+"Items" = "Items";
+"Sales Report" = "Sales Report";
+"Settlement" = "Settlement";
+"Settings" = "Settings";
+"Language" = "Language";
+"Server" = "Server";
+"Printer" = "Printer";
+
+/* Field labels */
+"Amount" = "Amount";
+"Brand : %@" = "Brand : %@";
+"Cash Received" = "Cash Received";
+"Change" = "Change";
+"Customer" = "Customer";
+"Date" = "Date";
+"Discount" = "Discount";
+"Email (optional)" = "Email (optional)";
+"Gross Sales" = "Gross Sales";
+"ID %lld" = "ID %lld";
+"Name" = "Name";
+"Net Sales" = "Net Sales";
+"Note" = "Note";
+"Order" = "Order";
+"Order #%@" = "Order #%@";
+"Product" = "Product";
+"QTY" = "QTY";
+"Service" = "Service";
+"Status" = "Status";
+"Store : %@" = "Store : %@";
+"Sub Total" = "Sub Total";
+"Total" = "Total";
+"Type" = "Type";
+"Rp." = "Rp.";
+"START" = "START";
+"END" = "END";
+"TOTAL" = "TOTAL";
+"Mobile phone" = "Mobile phone";
+
+/* Values / statuses */
+"All" = "All";
+"All Categories" = "All Categories";
+"Cash" = "Cash";
+"Confirmed" = "Confirmed";
+"DINE" = "DINE";
+"DINE IN" = "DINE IN";
+"Free" = "Free";
+"Optional" = "Optional";
+"Choose 1" = "Choose 1";
+"Choose %d-%d" = "Choose %d-%d";
+"Choose max %d" = "Choose max %d";
+"No discount" = "No discount";
+"No items" = "No items";
+"No notes" = "No notes";
+"No phone on file" = "No phone on file";
+"Paid" = "Paid";
+"Registered customer" = "Registered customer";
+"Sold Out" = "Sold Out";
+"TAKE" = "TAKE";
+"TAKE AWAY" = "TAKE AWAY";
+"Unavailable" = "Unavailable";
+"Walk-in" = "Walk-in";
+
+/* Order flow hints */
+"Add to Order" = "Add to Order";
+"Add to Order · %@" = "Add to Order · %@";
+"Add note e.g. less sugar, no ice" = "Add note e.g. less sugar, no ice";
+"Cart is empty" = "Cart is empty";
+"Collapse" = "Collapse";
+"Discount applied from cart" = "Discount applied from cart";
+"Done editing %@" = "Done editing %@";
+"Edit %@" = "Edit %@";
+"Expand to edit customer, note, discount" = "Expand to edit customer, note, discount";
+"Loading options..." = "Loading options...";
+"No customer linked — this sale is recorded as a walk-in" = "No customer linked — this sale is recorded as a walk-in";
+"Order Summary, tap to view full list" = "Order Summary, tap to view full list";
+"Please wait" = "Please wait";
+"Processing payment..." = "Processing payment...";
+"Re-confirm to apply changes" = "Re-confirm to apply changes";
+"Remove customer" = "Remove customer";
+"Review your order and choose a payment method" = "Review your order and choose a payment method";
+"Scan QR Code" = "Scan QR Code";
+"Pay by Card" = "Pay by Card";
+"Select Payment Method" = "Select Payment Method";
+"Select Variant" = "Select Variant";
+"Select a variant above to choose options" = "Select a variant above to choose options";
+"Tap a product to start ordering" = "Tap a product to start ordering";
+"Tap card on reader" = "Tap card on reader";
+"Tap to add" = "Tap to add";
+"Your selected items will appear here" = "Your selected items will appear here";
+"mis. ayam jangan terlalu gosong" = "e.g. don't char the chicken";
+
+/* Order list */
+"Clear filters" = "Clear filters";
+"Clear search" = "Clear search";
+"Copy Order No" = "Copy Order No";
+"Loading more orders" = "Loading more orders";
+"Loading more orders..." = "Loading more orders...";
+"No matching orders" = "No matching orders";
+"No orders yet" = "No orders yet";
+"Orders for today will appear here" = "Orders for today will appear here";
+"Search order, customer" = "Search order, customer";
+"Searching customers..." = "Searching customers...";
+"Tap to view details" = "Tap to view details";
+"Try a different search or filter" = "Try a different search or filter";
+"View Detail" = "View Detail";
+"%lld items" = "%lld items";
+"Shows %lld items" = "Shows %lld items";
+"%lld shown • %@ takings" = "%lld shown • %@ takings";
+
+/* Reports */
+"QTY: %lld" = "QTY: %lld";
+"Gross: %@" = "Gross: %@";
+"Net: %@" = "Net: %@";
+"Discount: %@" = "Discount: %@";
+"Total Orders" = "Total Orders";
+"Peak Time" = "Peak Time";
+"Non Peak Time" = "Non Peak Time";
+"Load Report" = "Load Report";
+
+/* Customer picker */
+"Customer name" = "Customer name";
+"Mobile phone e.g. 0812 3456 7890" = "Mobile phone e.g. 0812 3456 7890";
+"0812 3456 7890" = "0812 3456 7890";
+"name@example.com" = "name@example.com";
+"No customer found" = "No customer found";
+"No one matches %@." = "No one matches %@.";
+"that number" = "that number";
+"Register new customer" = "Register new customer";
+"Register before taking the order" = "Register before taking the order";
+"Search an existing customer by phone or register a new one" = "Search an existing customer by phone or register a new one";
+"Search by mobile phone" = "Search by mobile phone";
+"Search by phone" = "Search by phone";
+"Search failed" = "Search failed";
+"Search or register" = "Search or register";
+"Search or register customer" = "Search or register customer";
+"Type a mobile number to find an existing customer, or register a new one." = "Type a mobile number to find an existing customer, or register a new one.";
+"Name is required" = "Name is required";
+"Enter a valid phone number (5–30 digits)" = "Enter a valid phone number (5–30 digits)";
+"Request failed: HTTP %d" = "Request failed: HTTP %d";
+
+/* Settings / server / printer */
+"Address (IP)" = "Address (IP)";
+"Host (e.g. 103.150.197.7)" = "Host (e.g. 103.150.197.7)";
+"Port (default 8080)" = "Port (default 8080)";
+"Port (network, default 9100)" = "Port (network, default 9100)";
+"Bluetooth" = "Bluetooth";
+"Network" = "Network";
+"Scanning for printers..." = "Scanning for printers...";
+"Unknown printer" = "Unknown printer";
+"Café: Warm Harmoni palette for Coffee & Restaurant POS. Light is default." = "Café: Warm Harmoni palette for Coffee & Restaurant POS. Light is default.";
+"Bluetooth mode works with ESC/POS thermal printers that expose a BLE service (e.g. VSC TM-58D PRO). SM58 prints Unicode via iPad raster (GS v 0)." = "Bluetooth mode works with ESC/POS thermal printers that expose a BLE service (e.g. VSC TM-58D PRO). SM58 prints Unicode via iPad raster (GS v 0).";
+"On iPad, only network (TCP/IP) ESC/POS thermal printers are supported. Unicode via hybrid raster works for 58mm SM58." = "On iPad, only network (TCP/IP) ESC/POS thermal printers are supported. Unicode via hybrid raster works for 58mm SM58.";
+"Bluetooth ready" = "Bluetooth ready";
+"Bluetooth ready - scan to pair" = "Bluetooth ready - scan to pair";
+"Bluetooth is off. Turn it on in Settings." = "Bluetooth is off. Turn it on in Settings.";
+"Bluetooth access denied. Allow in Settings > Privacy." = "Bluetooth access denied. Allow in Settings > Privacy.";
+"Bluetooth is not supported on this device." = "Bluetooth is not supported on this device.";
+"Bluetooth unavailable" = "Bluetooth unavailable";
+"Saved. Server: %@" = "Saved. Server: %@";
+"Bluetooth printer saved" = "Bluetooth printer saved";
+"Printer saved: network" = "Printer saved: network";
+"Connecting to %@..." = "Connecting to %@...";
+"Connected to %@" = "Connected to %@";
+"Connecting... (make sure printer is on)" = "Connecting... (make sure printer is on)";
+"Printing Unicode test..." = "Printing Unicode test...";
+"Unicode test sent (58mm raster for JP/CN/KR/AR)" = "Unicode test sent (58mm raster for JP/CN/KR/AR)";
+
+/* Theme */
+"Light" = "Light";
+"Dark" = "Dark";
+"System" = "System";
+"Café" = "Café";
+"Clean" = "Clean";
+"Espresso" = "Espresso";
+"Auto" = "Auto";
+"Harmoni" = "Harmoni";
+"English" = "English";
+"Bahasa Indonesia" = "Bahasa Indonesia";
+
+/* Output / toast messages */
+"Insufficient cash entered!" = "Insufficient cash entered!";
+"Kitchen ticket sent" = "Kitchen ticket sent";
+"No confirmed order" = "No confirmed order";
+"No confirmed order to pay" = "No confirmed order to pay";
+"Nothing to print" = "Nothing to print";
+"Payment failed: %@" = "Payment failed: %@";
+"Payment successful" = "Payment successful";
+"Print failed: %@" = "Print failed: %@";
+"Print sent successfully" = "Print sent successfully";
+"Print sent to printer" = "Print sent to printer";
+"Printing..." = "Printing...";
+"Network error: %@" = "Network error: %@";
+"Failed to load more: %@" = "Failed to load more: %@";
+"Failed to load orders: HTTP %d" = "Failed to load orders: HTTP %d";
+"Failed to load report: HTTP %d" = "Failed to load report: HTTP %d";
+"Login failed" = "Login failed";
+"Login failed: HTTP %d" = "Login failed: HTTP %d";
+"Confirm order failed: HTTP %d" = "Confirm order failed: HTTP %d";
+"Unicode print failed: %@" = "Unicode print failed: %@";
+"Void failed" = "Void failed";
+"Could not confirm the updated order" = "Could not confirm the updated order";
+
+/* Dialogs */
+"Close order" = "Close order";
+"Close this order? This will remove the order." = "Close this order? This will remove the order.";
+"Void order?" = "Void order?";
+"The app and printed receipts use this language." = "The app and printed receipts use this language.";

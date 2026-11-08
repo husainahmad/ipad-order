@@ -53,7 +53,13 @@ struct OrderDetailRequest: Codable {
 struct OrderRequest: Codable {
     let storeServiceTypesId: Int
     let customerName: String
+    /// The customer service's id, or `-1` for a walk-in. The order service stores
+    /// this on `orders.customer_id` and uses it to key customer history, so it is
+    /// the part of the customer that actually links a sale to a person.
     let customerId: Int
+    /// Repeats the phone onto the order row, which keeps a historic receipt readable
+    /// after the customer record is edited or soft-deleted.
+    let customerPhone: String
     let remark: String
     let orderDetails: [OrderDetailRequest]
     let discount: String
@@ -61,12 +67,14 @@ struct OrderRequest: Codable {
     init(storeServiceTypesId: Int = 1,
          customerName: String,
          customerId: Int = -1,
+         customerPhone: String = "",
          remark: String,
          orderDetails: [OrderDetailRequest],
          discount: String) {
         self.storeServiceTypesId = storeServiceTypesId
         self.customerName = customerName
         self.customerId = customerId
+        self.customerPhone = customerPhone
         self.remark = remark
         self.orderDetails = orderDetails
         self.discount = discount

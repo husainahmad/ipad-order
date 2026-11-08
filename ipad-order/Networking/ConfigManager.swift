@@ -27,4 +27,5 @@ enum ConfigManager {
     static var baseAuth: String { "http://\(host):\(port)/" }
     static var baseMenu: String { "http://\(host):\(port)/" }
     static var baseOrder: String { "http://\(host):\(port)/" }
+    static var baseCustomer: String { "http://\(host):\(port)/" }
 }

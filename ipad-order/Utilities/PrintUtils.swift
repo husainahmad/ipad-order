@@ -4,14 +4,11 @@ enum PrintUtils {
 
     static let lineWidth = 32
 
-    // MARK: - Receipt language (random single per print, with native font raster)
-    static let receiptLanguages = ["id","en","jv","su","ban","min","bug","mad","ar","ja","ko","zh-Hans","fr","de","es"]
-    static var receiptLanguage: String { receiptLanguages.randomElement() ?? "id" }
-
-    static func setReceiptLanguage(_ lang: String) {
-        // Kept for Settings compatibility, but print now random — ignoring stored value
-        UserDefaults.standard.set(lang, forKey: "receiptLanguage")
-    }
+    // MARK: - Receipt language
+    // The receipt follows the app language so the ticket matches the screen the
+    // cashier was just looking at. Latin transliterations only, so any ESC/POS
+    // printer prints them without a raster pipeline.
+    static var receiptLanguage: String { AppLanguage.resolvedCode }
 
     static func localized(_ key: String, lang: String) -> String {
         if let path = Bundle.main.path(forResource: lang, ofType: "lproj"),
@@ -44,10 +41,19 @@ enum PrintUtils {
                         let left = "  \(sku.skuName ?? "") x\(Int(sku.quantityValue))"
                         let right = CurrencyUtils.formatRp(sku.amountValue)
                         sb += twoCol(left: left, right: right)
+                        // The choices belong to this variant, so they print under it.
+                        for group in detail.customizations(forSku: sku) {
+                            if !group.name.isEmpty {
+                                sb += customizationGroupLine(group.name)
+                            }
+                            for opt in group.items {
+                                sb += customizationOptionLine(opt, showPrice: true)
+                            }
+                        }
                     }
                 }
-                // Choices are stored against the product line, not the SKU.
-                for group in detail.customizationsByGroup {
+                // Older orders stored the choices against the product line only.
+                for group in detail.unattachedCustomizationsByGroup {
                     if !group.name.isEmpty {
                         sb += customizationGroupLine(group.name)
                     }
@@ -66,8 +72,8 @@ enum PrintUtils {
             sb += twoCol(left: "Note", right: order.remarkValue)
         }
         sb += separator()
-        // Single random language footer with native font raster (ESCPosEncoder detects per line)
-        let lang = receiptLanguages.randomElement() ?? "id"
+        // Footer follows the app language.
+        let lang = AppLanguage.resolvedCode
         sb += centered(localized("receipt.thank_you", lang: lang))
         sb += centered(localized("receipt.see_you", lang: lang))
         return sb
@@ -96,9 +102,17 @@ enum PrintUtils {
                 if let skus = detail.orderDetailSkus {
                     for sku in skus {
                         sb += twoCol(left: "  \(sku.skuName ?? "") x\(Int(sku.quantityValue))", right: "")
+                        for cGroup in detail.customizations(forSku: sku) {
+                            if !cGroup.name.isEmpty {
+                                sb += customizationGroupLine(cGroup.name)
+                            }
+                            for opt in cGroup.items {
+                                sb += customizationOptionLine(opt, showPrice: false)
+                            }
+                        }
                     }
                 }
-                for cGroup in detail.customizationsByGroup {
+                for cGroup in detail.unattachedCustomizationsByGroup {
                     if !cGroup.name.isEmpty {
                         sb += customizationGroupLine(cGroup.name)
                     }
