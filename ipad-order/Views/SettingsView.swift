@@ -16,11 +16,11 @@ struct SettingsView: View {
     @State private var printerStatus = ""
 
     @ObservedObject private var printerManager = PrinterManager.shared
-    private let receiptLanguages: [(code: String, name: String, flag: String)] = [
-        ("system", "System", "⚙️"), ("id", "Indonesia", "🇮🇩"), ("en", "English", "🇬🇧"),
-        ("ar", "العربية", "🇸🇦"), ("ja", "日本語", "🇯🇵"), ("ko", "한국어", "🇰🇷"),
-        ("zh-Hans", "中文", "🇨🇳"), ("fr", "Français", "🇫🇷"), ("de", "Deutsch", "🇩🇪"), ("es", "Español", "🇪🇸"),
-        ("jv", "Jawa", "🇮🇩"), ("su", "Sunda", "🇮🇩"), ("ban", "Bali", "🇮🇩"), ("min", "Minang", "🇮🇩"), ("bug", "Bugis", "🇮🇩"), ("mad", "Madura", "🇮🇩")
+    @AppStorage("app_language") private var appLanguage = AppLanguage.system
+    private let appLanguages: [(code: String, name: String)] = [
+        (AppLanguage.system, "System"),
+        (AppLanguage.english, "English"),
+        (AppLanguage.indonesian, "Bahasa Indonesia")
     ]
 
     var body: some View {
@@ -32,7 +32,7 @@ struct SettingsView: View {
 
                     themeCard
 
-                    receiptLanguageCard
+                    appLanguageCard
 
                     serverCard
                     printerCard
@@ -122,7 +122,7 @@ struct SettingsView: View {
                 Image(systemName: themeManager.theme.icon)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.posAccent)
-                Text(themeManager.theme.displayName)
+                Text(LocalizedStringKey(themeManager.theme.displayName))
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.posAccent)
             }
@@ -136,11 +136,11 @@ struct SettingsView: View {
                             Image(systemName: mode.icon)
                                 .font(.system(size: 18))
                                 .foregroundColor(themeManager.theme == mode ? .white : .posTextSecondary)
-                            Text(mode.displayName)
+                            Text(LocalizedStringKey(mode.displayName))
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(themeManager.theme == mode ? .white : .posTextPrimary)
                             if mode == .cafe {
-                                Text(mode.description)
+                                Text(LocalizedStringKey(mode.description))
                                     .font(.system(size: 10, weight: .medium))
                                     .foregroundColor(themeManager.theme == mode ? .white.opacity(0.85) : .posTextSecondary)
                             }
@@ -169,54 +169,30 @@ struct SettingsView: View {
         .posCard()
     }
 
-    @State private var lastRandomLang: String = PrintUtils.receiptLanguages.randomElement() ?? "id"
-    private var receiptLanguageCard: some View {
+    /// App language drives both the UI and the receipt, so the ticket and the screen
+    /// the cashier just used are always in the same language.
+    private var appLanguageCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: "printer.fill")
+                Image(systemName: "globe")
                     .font(.system(size: 16))
                     .foregroundColor(.posPrimary)
-                Text("Receipt — SM58 Auto")
+                Text("Language")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.posPrimary)
-                Spacer()
-                Text("IMAGE")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(Color.posAccent)
-                    .clipShape(Capsule())
             }
 
-            Text("Each receipt is rendered on iPad as image (384 dots) with iPad fonts — JP/CN/KR/AR + Indonesian locals — then sent as GS v 0 raster. SM58 prints image even without Unicode firmware. Latin also as image to avoid printer font fallback.")
+            Text("The app and printed receipts use this language.")
                 .font(.system(size: 12))
                 .foregroundColor(.posTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 8) {
-                Button("Test Receipt (Random)") {
-                    let sample = Order(id: 999, orderNo: "TEST-001", customerName: "Test", remark: "", status: "PAID", storeServiceTypesId: 1, subTotal: 20000, discountTotal: 0, grandTotal: 20000, createdAt: "", orderPayment: nil, orderDetails: nil)
-                    let text = PrintUtils.buildReceiptText(sample)
-                    print(text)
-                    PrinterManager.print(text) { result in
-                        switch result {
-                        case .success: print("Random image receipt print success")
-                        case .failure(let e): print("Random receipt print failed: \(e.localizedDescription)")
-                        }
-                    }
+            Picker("Language", selection: $appLanguage) {
+                ForEach(appLanguages, id: \.code) { language in
+                    Text(LocalizedStringKey(language.name)).tag(language.code)
                 }
-                .buttonStyle(PosButtonStyle(filled: true))
-                Button("Test Unicode (JP/CN/KR/AR)") {
-                    PrinterManager.printUnicodeTest { result in
-                        print(result)
-                    }
-                }
-                .buttonStyle(PosButtonStyle(filled: false, outlineColor: .posPrimary))
             }
-
-            Label("Fonts from iPad (Hiragino/PingFang/Apple SD/Geeza) — to bundle custom Noto fonts add .ttf to Fonts/ and register in Info.plist UIAppFonts; renderer will fallback automatically.", systemImage: "info.circle")
-                .font(.system(size: 11))
-                .foregroundColor(.posTextSecondary)
+            .pickerStyle(.segmented)
         }
         .posCard()
     }
@@ -323,7 +299,7 @@ struct SettingsView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 14))
                     .foregroundColor(.posStatusPaid)
-                Text(peripheral.name ?? "Printer")
+                Text(LocalizedStringKey(peripheral.name ?? "Printer"))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.posTextPrimary)
                 Spacer()
@@ -360,7 +336,7 @@ struct SettingsView: View {
                                 .font(.system(size: 14))
                                 .foregroundColor(.posPrimary)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(peripheral.name ?? "Unknown printer")
+                                Text(LocalizedStringKey(peripheral.name ?? "Unknown printer"))
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundColor(.posTextPrimary)
                                 Text(peripheral.identifier.uuidString)
@@ -392,7 +368,7 @@ struct SettingsView: View {
                     printerManager.startScan()
                 }
             } label: {
-                Text(printerManager.isScanning ? "Stop Scan" : "Scan for Printers")
+                Text(LocalizedStringKey(printerManager.isScanning ? "Stop Scan" : "Scan for Printers"))
             }
             .buttonStyle(PosButtonStyle(filled: true))
 
@@ -485,22 +461,22 @@ struct SettingsView: View {
     private var bluetoothStateText: String {
         switch printerManager.bluetoothState {
         case .poweredOn:
-            return printerManager.connectedPeripheral != nil
+            return L10n.t(printerManager.connectedPeripheral != nil
                 ? "Bluetooth ready"
-                : "Bluetooth ready - scan to pair"
+                : "Bluetooth ready - scan to pair")
         case .poweredOff:
-            return "Bluetooth is off. Turn it on in Settings."
+            return L10n.t("Bluetooth is off. Turn it on in Settings.")
         case .unauthorized:
-            return "Bluetooth access denied. Allow in Settings > Privacy."
+            return L10n.t("Bluetooth access denied. Allow in Settings > Privacy.")
         case .unsupported:
-            return "Bluetooth is not supported on this device."
+            return L10n.t("Bluetooth is not supported on this device.")
         default:
-            return "Bluetooth unavailable"
+            return L10n.t("Bluetooth unavailable")
         }
     }
 
     private func connectBluetooth(to peripheral: CBPeripheral) {
-        printerStatus = "Connecting to \(peripheral.name ?? "printer")..."
+        printerStatus = L10n.t("Connecting to %@...", peripheral.name ?? L10n.t("Printer"))
         printerManager.connect(to: peripheral)
         PrinterManager.save(type: PrinterManager.typeBluetooth,
                             address: PrinterManager.address,
@@ -508,9 +484,9 @@ struct SettingsView: View {
                             name: peripheral.name ?? "")
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             if printerManager.connectedPeripheral?.identifier == peripheral.identifier {
-                printerStatus = "Connected to \(peripheral.name ?? "printer")"
+                printerStatus = L10n.t("Connected to %@", peripheral.name ?? L10n.t("Printer"))
             } else {
-                printerStatus = "Connecting... (make sure printer is on)"
+                printerStatus = L10n.t("Connecting... (make sure printer is on)")
             }
         }
     }
@@ -519,7 +495,7 @@ struct SettingsView: View {
         let port = Int(serverPort) ?? 8080
         ConfigManager.save(host: serverHost, port: port)
         APIClient.shared.reset()
-        serverStatus = "Saved. Server: \(ConfigManager.baseOrder)"
+        serverStatus = L10n.t("Saved. Server: %@", ConfigManager.baseOrder)
     }
 
     private func savePrinter() {
@@ -529,26 +505,26 @@ struct SettingsView: View {
                             port: port,
                             name: PrinterManager.savedPrinterName)
         printerStatus = printerType == PrinterManager.typeBluetooth
-            ? "Bluetooth printer saved"
-            : "Printer saved: network"
+            ? L10n.t("Bluetooth printer saved")
+            : L10n.t("Printer saved: network")
     }
 
     private func testPrint() {
         savePrinter()
-        printerStatus = "Printing..."
+        printerStatus = L10n.t("Printing...")
         let text = "KOPI HARMONI\n"
             + "----------------------------\n"
             + "TEST PRINT\n"
             + "Printer: \(printerType)\n"
             + "----------------------------\n"
-            + "Terima kasih\n"
+            + L10n.t("receipt.thank_you") + "\n"
         PrinterManager.print(text) { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    printerStatus = "Print sent successfully"
+                    printerStatus = L10n.t("Print sent successfully")
                 case .failure(let error):
-                    printerStatus = "Print failed: \(error.localizedDescription)"
+                    printerStatus = L10n.t("Print failed: %@", error.localizedDescription)
                 }
             }
         }
@@ -556,14 +532,14 @@ struct SettingsView: View {
 
     private func testUnicode() {
         savePrinter()
-        printerStatus = "Printing Unicode test..."
+        printerStatus = L10n.t("Printing Unicode test...")
         PrinterManager.printUnicodeTest { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    printerStatus = "Unicode test sent (58mm raster for JP/CN/KR/AR)"
+                    printerStatus = L10n.t("Unicode test sent (58mm raster for JP/CN/KR/AR)")
                 case .failure(let error):
-                    printerStatus = "Unicode print failed: \(error.localizedDescription)"
+                    printerStatus = L10n.t("Unicode print failed: %@", error.localizedDescription)
                 }
             }
         }

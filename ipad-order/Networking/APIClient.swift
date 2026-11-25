@@ -3,6 +3,11 @@ import Foundation
 enum ApiError: LocalizedError {
     case invalidResponse
     case http(Int)
+    /// A rejection that came with a human-readable explanation, e.g. the customer
+    /// service's `DUPLICATE_CUSTOMER`. Prefer this over `http` whenever the body
+    /// carries a message, so the teller sees "Phone already registered" rather
+    /// than "HTTP 409".
+    case server(code: String?, message: String)
     case network(String)
     case notAuthenticated
 
@@ -10,6 +15,7 @@ enum ApiError: LocalizedError {
         switch self {
         case .invalidResponse: return "Invalid server response"
         case .http(let code): return "HTTP \(code)"
+        case .server(_, let message): return message
         case .network(let message): return "Network error: \(message)"
         case .notAuthenticated: return "Not authenticated"
         }
@@ -56,6 +62,24 @@ final class APIClient {
         return response.data ?? []
     }
 
+    /// One cursor page of a category's products with the operator's tier pricing.
+    ///
+    /// `beforeId` is the cursor the previous page returned. Paging on an id rather than
+    /// an offset means a product inserted between two requests cannot make the next page
+    /// repeat a row the cashier has already seen.
+    func productsByCategoryPage(_ categoryId: Int, limit: Int = 50,
+                                beforeId: Int? = nil) async throws -> ProductPageResponse {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let beforeId {
+            query.append(URLQueryItem(name: "beforeId", value: String(beforeId)))
+        }
+        let response: ApiResponse<ProductPageResponse> = try await send(
+            method: "GET", base: ConfigManager.baseMenu,
+            path: "api/v1/product/category/\(categoryId)/price/page", query: query)
+        guard let page = response.data else { throw ApiError.invalidResponse }
+        return page
+    }
+
     func getUser(username: String) async throws -> User {
         let response: ApiResponse<User> = try await send(
             method: "GET", base: ConfigManager.baseMenu,
@@ -66,6 +90,34 @@ final class APIClient {
         return user
     }
 
+    func productCustomizations(_ productId: Int) async throws -> [ProductCustomization] {
+        let response: ApiResponse<[ProductCustomization]> = try await send(
+            method: "GET", base: ConfigManager.baseMenu,
+            path: "api/v1/product/\(productId)/customization")
+        return response.data ?? []
+    }
+
+    // MARK: - Customers
+
+    /// Searches customers by free text. The service matches name, phone and email, so
+    /// a phone number typed at the till finds the customer without a dedicated
+    /// phone-only endpoint.
+    func searchCustomers(_ search: String, page: Int = 0, size: Int = 20) async throws -> CustomerPage {
+        let query = [
+            URLQueryItem(name: "search", value: search),
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "size", value: String(size))
+        ]
+        return try await send(method: "GET", base: ConfigManager.baseCustomer,
+                              path: "api/v1/customers", query: query)
+    }
+
+    func createCustomer(_ request: CreateCustomerRequest) async throws -> Customer {
+        let body = try JSONEncoder().encode(request)
+        return try await send(method: "POST", base: ConfigManager.baseCustomer,
+                              path: "api/v1/customers", body: body)
+    }
+
     // MARK: - Orders
 
     func dailyOrders() async throws -> [Order] {
@@ -74,10 +126,29 @@ final class APIClient {
         return response.data ?? []
     }
 
-    func confirmOrder(_ request: OrderRequest) async throws -> Order {
+    /// One page of today's orders, newest first.
+    ///
+    /// `beforeId` is the cursor the previous page returned. Paging on an id rather than an
+    /// offset means a sale confirmed between two requests cannot make the next page repeat
+    /// a row the cashier has already seen.
+    func dailyOrdersPage(limit: Int = 50, beforeId: Int? = nil) async throws -> OrderPageResponse {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let beforeId {
+            query.append(URLQueryItem(name: "beforeId", value: String(beforeId)))
+        }
+        let response: ApiResponse<OrderPageResponse> = try await send(
+            method: "GET", base: ConfigManager.baseOrder,
+            path: "api/v1/order/page", query: query)
+        guard let page = response.data else { throw ApiError.invalidResponse }
+        return page
+    }
+
+    func confirmOrder(_ request: OrderRequest, idempotencyKey: String? = nil) async throws -> Order {
         let body = try JSONEncoder().encode(request)
+        let headers = idempotencyKey.map { ["Idempotency-Key": $0] }
         let response: ApiResponse<Order> = try await send(
-            method: "POST", base: ConfigManager.baseOrder, path: "api/v1/order", body: body)
+            method: "POST", base: ConfigManager.baseOrder, path: "api/v1/order",
+            body: body, headers: headers)
         guard let order = response.data else {
             throw ApiError.invalidResponse
         }
@@ -148,7 +219,9 @@ final class APIClient {
                                     path: String,
                                     body: Data? = nil,
                                     query: [URLQueryItem]? = nil,
-                                    authenticated: Bool = true) async throws -> T {
+                                    headers: [String: String]? = nil,
+                                    authenticated: Bool = true,
+                                    mayRefresh: Bool = true) async throws -> T {
         var components = URLComponents(string: base + path)
         if let query = query {
             components?.queryItems = query
@@ -163,6 +236,11 @@ final class APIClient {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
+        if let headers = headers {
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
         if authenticated, !TokenManager.accessToken.isEmpty {
             request.setValue("Bearer \(TokenManager.accessToken)", forHTTPHeaderField: "Authorization")
         }
@@ -172,21 +250,41 @@ final class APIClient {
             throw ApiError.invalidResponse
         }
 
-        if (http.statusCode == 401 || http.statusCode == 403), authenticated {
-            let refreshed = await refreshGate.perform { await self.refreshAccessToken() }
-            if refreshed {
-                return try await send(method: method, base: base, path: path,
-                                      body: body, query: query, authenticated: authenticated)
+        // Only 401 means the access token is stale; 403 is a genuine permission
+        // failure and refreshing would not help. Treating 403 as an auth failure
+        // used to sign the cashier out and discard the in-progress order.
+        if http.statusCode == 401, authenticated {
+            guard mayRefresh else {
+                // The refreshed token was rejected too: this is a real sign-out.
+                TokenManager.clearTokens()
+                NotificationCenter.default.post(name: .didReceiveNotAuthenticated, object: nil)
+                throw ApiError.notAuthenticated
             }
-            TokenManager.clearTokens()
-            NotificationCenter.default.post(name: .didReceiveNotAuthenticated, object: nil)
-            throw ApiError.notAuthenticated
+            switch await refreshGate.perform({ await self.refreshAccessToken() }) {
+            case .success:
+                return try await send(method: method, base: base, path: path,
+                                      body: body, query: query, headers: headers,
+                                      authenticated: authenticated, mayRefresh: false)
+            case .rejected:
+                // The refresh token itself is invalid/expired — the only case that
+                // should end the session.
+                TokenManager.clearTokens()
+                NotificationCenter.default.post(name: .didReceiveNotAuthenticated, object: nil)
+                throw ApiError.notAuthenticated
+            case .transient:
+                // Network blip / server hiccup: keep the session and the cart, let
+                // the caller retry later instead of forcing a login.
+                throw ApiError.network("Could not refresh the session")
+            }
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 403 {
-                // No retry for permission-denied without auth context
-                throw ApiError.http(http.statusCode)
+            // The services answer failures with a stable error envelope. Surfacing
+            // its message is the difference between "Phone already registered" and
+            // an opaque status code at the counter.
+            if let body = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
+               let message = body.message, !message.isEmpty {
+                throw ApiError.server(code: body.code, message: message)
             }
             throw ApiError.http(http.statusCode)
         }
@@ -194,51 +292,71 @@ final class APIClient {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private func refreshAccessToken() async -> Bool {
+    /// Refreshes the access token and reports *why* it failed. The distinction
+    /// matters: only an explicit rejection from the auth service should log the
+    /// cashier out. A timeout or 5xx must leave the session (and the cart) intact.
+    private func refreshAccessToken() async -> RefreshOutcome {
         let refresh = TokenManager.refreshToken
-        guard !refresh.isEmpty else {
-            TokenManager.clearTokens()
-            return false
-        }
+        guard !refresh.isEmpty else { return .rejected }
         let url = URL(string: ConfigManager.baseAuth + "api/v1/auth/refresh-token")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data(refresh.utf8)
 
+        let data: Data
+        let response: URLResponse
         do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                TokenManager.clearTokens()
-                return false
-            }
-            let auth = try JSONDecoder().decode(AuthResponse.self, from: data)
-            guard !auth.accessTokenValue.isEmpty else {
-                TokenManager.clearTokens()
-                return false
-            }
-            TokenManager.setTokens(access: auth.accessTokenValue,
-                                   refresh: auth.refreshTokenValue.isEmpty ? refresh : auth.refreshTokenValue)
-            return true
+            (data, response) = try await session.data(for: request)
         } catch {
-            TokenManager.clearTokens()
-            return false
+            // Offline / timeout / DNS: retryable, do not clear tokens.
+            return .transient
         }
+
+        guard let http = response as? HTTPURLResponse else { return .transient }
+        if http.statusCode == 408 || http.statusCode == 429 { return .transient }
+        if (400..<500).contains(http.statusCode) { return .rejected }
+        guard (200..<300).contains(http.statusCode) else { return .transient }
+
+        guard let auth = try? JSONDecoder().decode(AuthResponse.self, from: data),
+              !auth.accessTokenValue.isEmpty else {
+            // A malformed success response is a server problem, not a dead session.
+            return .transient
+        }
+        TokenManager.setTokens(access: auth.accessTokenValue,
+                               refresh: auth.refreshTokenValue.isEmpty ? refresh : auth.refreshTokenValue)
+        return .success
     }
 }
 
-private actor RefreshGate {
-    private var isRefreshing = false
+enum RefreshOutcome {
+    case success
+    case rejected
+    case transient
+}
 
-    func perform(_ op: () async -> Bool) async -> Bool {
-        if isRefreshing {
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            return true
-        }
-        isRefreshing = true
-        defer { isRefreshing = false }
-        return await op()
+/// Coalesces concurrent refreshes into one request. Every caller receives the
+/// actual outcome; the previous version returned `true` to waiters without
+/// knowing whether the refresh had succeeded.
+private actor RefreshGate {
+    private var inFlight: Task<RefreshOutcome, Never>?
+
+    func perform(_ op: @escaping () async -> RefreshOutcome) async -> RefreshOutcome {
+        if let inFlight { return await inFlight.value }
+        let task = Task { await op() }
+        inFlight = task
+        let result = await task.value
+        inFlight = nil
+        return result
     }
 }
 
 struct EmptyData: Decodable {}
+
+/// The error envelope every Harmoni service answers with. Only the fields the app
+/// actually shows are decoded; `fieldErrors` is not needed for a counter message.
+struct ServerErrorBody: Decodable {
+    let code: String?
+    let message: String?
+}
+

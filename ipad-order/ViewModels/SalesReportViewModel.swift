@@ -18,12 +18,12 @@ final class SalesReportViewModel: ObservableObject {
             error = nil
         } catch let apiError as ApiError {
             if case .http(let code) = apiError {
-                self.error = "Failed to load report: HTTP \(code)"
+                self.error = L10n.t("Failed to load report: HTTP %d", code)
             } else {
                 self.error = apiError.localizedDescription
             }
         } catch {
-            self.error = "Network error: \(error.localizedDescription)"
+            self.error = L10n.t("Network error: %@", error.localizedDescription)
         }
     }
 

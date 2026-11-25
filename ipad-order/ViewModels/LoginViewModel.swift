@@ -20,7 +20,7 @@ final class LoginViewModel: ObservableObject {
         do {
             let auth = try await APIClient.shared.login(username: trimmed, password: password)
             guard !auth.accessTokenValue.isEmpty else {
-                error = "Login failed"
+                error = L10n.t("Login failed")
                 return false
             }
             TokenManager.setTokens(access: auth.accessTokenValue, refresh: auth.refreshTokenValue)
@@ -30,13 +30,13 @@ final class LoginViewModel: ObservableObject {
             return true
         } catch let apiError as ApiError {
             if case .http(let code) = apiError {
-                error = "Login failed: HTTP \(code)"
+                error = L10n.t("Login failed: HTTP %d", code)
             } else {
                 error = apiError.localizedDescription
             }
             return false
         } catch {
-            self.error = "Network error: \(error.localizedDescription)"
+            self.error = L10n.t("Network error: %@", error.localizedDescription)
             return false
         }
     }

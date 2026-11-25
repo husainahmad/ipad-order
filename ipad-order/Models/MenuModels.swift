@@ -20,10 +20,12 @@ struct Sku: Codable, Identifiable, Hashable {
 struct ProductImage: Codable, Hashable {
     let id: Int?
     let fileName: String?
-    let imageBlob: String?
+    let url: String?
     let mimeType: String?
 
-    var imageBlobValue: String { imageBlob ?? "" }
+    /// The hosted image location. The menu service uploads to ImgBB and stores the
+    /// returned link, so the app never receives image bytes — only this URL.
+    var urlValue: String { url ?? "" }
 }
 
 struct Product: Codable, Identifiable, Hashable {
@@ -34,4 +36,12 @@ struct Product: Codable, Identifiable, Hashable {
     let productImage: ProductImage?
 
     var nameValue: String { name ?? "" }
+}
+
+/// One page of products plus the cursor for the next one. Paging is on a product id
+/// rather than an offset, so an insert between requests cannot repeat a row.
+struct ProductPageResponse: Decodable {
+    let products: [Product]
+    let nextCursor: Int?
+    let hasMore: Bool?
 }

@@ -4,14 +4,11 @@ enum PrintUtils {
 
     static let lineWidth = 32
 
-    // MARK: - Receipt language (random single per print, with native font raster)
-    static let receiptLanguages = ["id","en","jv","su","ban","min","bug","mad","ar","ja","ko","zh-Hans","fr","de","es"]
-    static var receiptLanguage: String { receiptLanguages.randomElement() ?? "id" }
-
-    static func setReceiptLanguage(_ lang: String) {
-        // Kept for Settings compatibility, but print now random — ignoring stored value
-        UserDefaults.standard.set(lang, forKey: "receiptLanguage")
-    }
+    // MARK: - Receipt language
+    // The receipt follows the app language so the ticket matches the screen the
+    // cashier was just looking at. Latin transliterations only, so any ESC/POS
+    // printer prints them without a raster pipeline.
+    static var receiptLanguage: String { AppLanguage.resolvedCode }
 
     static func localized(_ key: String, lang: String) -> String {
         if let path = Bundle.main.path(forResource: lang, ofType: "lproj"),
@@ -41,12 +38,27 @@ enum PrintUtils {
                 sb += "\(detail.productName ?? "")\n"
                 if let skus = detail.orderDetailSkus {
                     for sku in skus {
-                        let left = "  \(sku.skuName ?? "") x\(Int(sku.quantity ?? 0))"
-                        let right = CurrencyUtils.formatRp(sku.amount ?? 0)
+                        let left = "  \(sku.skuName ?? "") x\(Int(sku.quantityValue))"
+                        let right = CurrencyUtils.formatRp(sku.amountValue)
                         sb += twoCol(left: left, right: right)
-                        if (sku.price ?? 0) > 0 {
-                            sb += twoCol(left: "  @ \(CurrencyUtils.formatRp(sku.price ?? 0))", right: "")
+                        // The choices belong to this variant, so they print under it.
+                        for group in detail.customizations(forSku: sku) {
+                            if !group.name.isEmpty {
+                                sb += customizationGroupLine(group.name)
+                            }
+                            for opt in group.items {
+                                sb += customizationOptionLine(opt, showPrice: true)
+                            }
                         }
+                    }
+                }
+                // Older orders stored the choices against the product line only.
+                for group in detail.unattachedCustomizationsByGroup {
+                    if !group.name.isEmpty {
+                        sb += customizationGroupLine(group.name)
+                    }
+                    for opt in group.items {
+                        sb += customizationOptionLine(opt, showPrice: true)
                     }
                 }
             }
@@ -60,32 +72,77 @@ enum PrintUtils {
             sb += twoCol(left: "Note", right: order.remarkValue)
         }
         sb += separator()
-        // Single random language footer with native font raster (ESCPosEncoder detects per line)
-        let lang = receiptLanguages.randomElement() ?? "id"
+        // Footer follows the app language.
+        let lang = AppLanguage.resolvedCode
         sb += centered(localized("receipt.thank_you", lang: lang))
         sb += centered(localized("receipt.see_you", lang: lang))
         return sb
     }
 
-    static func buildKitchenText(_ order: Order) -> String {
-        var sb = ""
-        sb += centered("KOPI HARMONI - KP")
-        sb += separator()
-        sb += row("Order", order.orderNoValue)
-        sb += row("Type", order.storeServiceName)
-        sb += separator()
-        if let details = order.orderDetails {
-            for detail in details {
+    static func buildKitchenTexts(_ order: Order) -> [String] {
+        guard let details = order.orderDetails, !details.isEmpty else { return [] }
+        let grouped = Dictionary(grouping: details, by: { $0.categoryId ?? 0 })
+        let sortedGroups = grouped.sorted(by: { $0.key < $1.key })
+        let categories = JsonCache.readCategories() ?? []
+        return sortedGroups.map { group in
+            var sb = ""
+            sb += centered("KOPI HARMONI - KP")
+            sb += separator()
+            sb += row("Order", order.orderNoValue)
+            sb += row("Type", order.storeServiceName)
+            sb += row("Cust", order.customerNameValue)
+            if !order.remarkValue.isEmpty {
+                sb += row("Note", order.remarkValue)
+            }
+            sb += separator()
+            let name = categories.first(where: { $0.id == group.key })?.name ?? "CATEGORY \(group.key)"
+            sb += centered("== \(name) ==")
+            for detail in group.value {
                 sb += "\(detail.productName ?? "")\n"
+                if let remark = detail.remark?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !remark.isEmpty {
+                    sb += row("  Note", remark)
+                }
                 if let skus = detail.orderDetailSkus {
                     for sku in skus {
-                        sb += twoCol(left: "  \(sku.skuName ?? "") x\(Int(sku.quantity ?? 0))", right: "")
+                        sb += twoCol(left: "  \(sku.skuName ?? "") x\(Int(sku.quantityValue))", right: "")
+                        for cGroup in detail.customizations(forSku: sku) {
+                            if !cGroup.name.isEmpty {
+                                sb += customizationGroupLine(cGroup.name)
+                            }
+                            for opt in cGroup.items {
+                                sb += customizationOptionLine(opt, showPrice: false)
+                            }
+                        }
+                    }
+                }
+                for cGroup in detail.unattachedCustomizationsByGroup {
+                    if !cGroup.name.isEmpty {
+                        sb += customizationGroupLine(cGroup.name)
+                    }
+                    for opt in cGroup.items {
+                        sb += customizationOptionLine(opt, showPrice: false)
                     }
                 }
             }
+            sb += separator()
+            return sb
         }
-        sb += separator()
-        return sb
+    }
+
+    /// Combined kitchen text for preview (all category tickets joined).
+    static func buildKitchenText(_ order: Order) -> String {
+        let tickets = buildKitchenTexts(order)
+        guard !tickets.isEmpty else {
+            var sb = ""
+            sb += centered("KOPI HARMONI - KP")
+            sb += separator()
+            sb += row("Order", order.orderNoValue)
+            sb += row("Type", order.storeServiceName)
+            sb += separator()
+            return sb
+        }
+        return tickets.joined(separator: separator())
     }
 
     static func buildSettlementText(_ settlement: Settlement) -> String {
@@ -136,6 +193,43 @@ enum PrintUtils {
             }
         }
         return sb
+    }
+
+    // MARK: - Customization lines (receipt + kitchen share the same hierarchy)
+
+    /// Group header, e.g. `    * Sugar`. Keeps the customization (group) name
+    /// visible above its options so both print on receipt and kitchen tickets.
+    static func customizationGroupLine(_ name: String, width: Int = lineWidth) -> String {
+        let prefix = "    * "
+        let clipped = String(name.prefix(max(4, width - prefix.count)))
+        return prefix + clipped + "\n"
+    }
+
+    /// One option under its group, e.g. `      - Less Sugar ×2 +Rp.5.000`.
+    /// Receipts show the surcharge; kitchen tickets omit it (qty is what matters).
+    /// Long names wrap onto continuation lines instead of being truncated.
+    static func customizationOptionLine(_ opt: OrderDetailSkuCustomization,
+                                        showPrice: Bool,
+                                        width: Int = lineWidth) -> String {
+        let indent = "      - "
+        if showPrice, opt.priceValue > 0 {
+            let price = "+\(CurrencyUtils.formatRp(opt.amountValue))"
+            return twoCol(left: indent + opt.displayName, right: price, width: width)
+        }
+        let line = indent + opt.displayName
+        guard line.count > width else { return line + "\n" }
+        var out = ""
+        var remainder = opt.displayName
+        var first = true
+        while !remainder.isEmpty {
+            let pref = first ? indent : "        "
+            first = false
+            let room = max(4, width - pref.count)
+            let chunk = String(remainder.prefix(room))
+            remainder = String(remainder.dropFirst(chunk.count))
+            out += pref + chunk + "\n"
+        }
+        return out
     }
 
     // MARK: - Layout helpers

@@ -1,41 +1,38 @@
 import Foundation
 import UIKit
 
+/// Loads and caches product images from the hosted URL the menu service returns.
+///
+/// The catalogue no longer ships image bytes: an upload goes to ImgBB and only the
+/// resulting link comes back on the product. So an image is a download, not a
+/// base64 decode, and it is cached by URL so a grid of products that share a link
+/// only fetches it once.
 enum ProductImageCache {
-    private static let cache = NSCache<NSString, UIImage>()
+    private static let cache = NSCache<NSURL, UIImage>()
 
-    static func image(for product: Product) -> UIImage? {
-        let blob = product.productImage?.imageBlobValue ?? ""
-        guard !blob.isEmpty else { return nil }
-
-        let key = key(for: product)
-        if let cached = cache.object(forKey: key) {
-            return cached
-        }
-
-        guard let data = Data(base64Encoded: sanitize(blob)) else { return nil }
-        guard let image = UIImage(data: data) else { return nil }
-
-        cache.setObject(image, forKey: key)
-        return image
+    /// The hosted URL for a product's image, or `nil` when it has none or the link
+    /// is not a usable URL.
+    static func url(for product: Product) -> URL? {
+        let raw = product.productImage?.urlValue
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !raw.isEmpty, let url = URL(string: raw) else { return nil }
+        return url
     }
 
-    private static func sanitize(_ base64: String) -> String {
-        var cleaned = base64
-        if let commaRange = cleaned.range(of: ",") {
-            cleaned = String(cleaned[commaRange.upperBound...])
-        }
-        return cleaned.replacingOccurrences(of: "\\s", with: "", options: .regularExpression)
-    }
+    /// The product's image, loaded from its URL on first call and served from the
+    /// cache afterwards. Returns `nil` when there is no image, or the download or
+    /// decode fails, so callers fall back to their placeholder.
+    static func image(for product: Product) async -> UIImage? {
+        guard let url = url(for: product) else { return nil }
+        if let cached = cache.object(forKey: url as NSURL) { return cached }
 
-    private static func key(for product: Product) -> NSString {
-        let fileName = product.productImage?.fileName ?? ""
-        if !fileName.isEmpty {
-            return fileName as NSString
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let image = UIImage(data: data) else { return nil }
+            cache.setObject(image, forKey: url as NSURL)
+            return image
+        } catch {
+            return nil
         }
-        if let id = product.productImage?.id {
-            return "\(id)" as NSString
-        }
-        return (product.productImage?.imageBlobValue ?? "") as NSString
     }
 }
