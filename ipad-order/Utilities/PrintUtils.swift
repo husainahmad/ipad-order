@@ -99,6 +99,10 @@ enum PrintUtils {
             sb += centered("== \(name) ==")
             for detail in group.value {
                 sb += "\(detail.productName ?? "")\n"
+                if let remark = detail.remark?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !remark.isEmpty {
+                    sb += row("  Note", remark)
+                }
                 if let skus = detail.orderDetailSkus {
                     for sku in skus {
                         sb += twoCol(left: "  \(sku.skuName ?? "") x\(Int(sku.quantityValue))", right: "")

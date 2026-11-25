@@ -47,7 +47,20 @@ struct OrderDetailRequest: Codable {
     let productId: Int
     let productName: String
     let categoryId: Int
+    /// Kitchen instruction for this product group. Lines of the same product with
+    /// different notes travel as separate groups, because the order service stores
+    /// the note on the order detail, not on the SKU line.
+    let remark: String?
     let orderDetailSkus: [OrderDetailSkuRequest]
+
+    init(productId: Int, productName: String, categoryId: Int,
+         orderDetailSkus: [OrderDetailSkuRequest], remark: String? = nil) {
+        self.productId = productId
+        self.productName = productName
+        self.categoryId = categoryId
+        self.orderDetailSkus = orderDetailSkus
+        self.remark = remark
+    }
 }
 
 struct OrderRequest: Codable {

@@ -132,6 +132,8 @@ struct OrderDetailSku: Codable, Hashable {
 struct OrderDetail: Codable, Hashable {
     let productName: String?
     let categoryId: Int?
+    /// Kitchen instruction stored on the product line by the order service.
+    var remark: String? = nil
     let orderDetailSkus: [OrderDetailSku]?
     /// The customization groups chosen on this line, each with its options.
     /// Absent when nothing was chosen.

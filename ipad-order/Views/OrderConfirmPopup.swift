@@ -526,6 +526,7 @@ struct OrderConfirmPopup: View {
     /// sale is confirmed again first — paying the pre-edit version would drop the
     /// change the cashier just made.
     private func pay() {
+        guard !working else { return }
         if selectedPayment == 1, cashReceived < totalValue {
             statusMessage = L10n.t("Insufficient cash entered!")
             toastManager.show(L10n.t("Insufficient cash entered!"), style: .error)
@@ -571,6 +572,7 @@ struct OrderConfirmPopup: View {
     }
 
     private func reconfirmThenPay() {
+        guard !working else { return }
         statusMessage = nil
         withAnimation(.easeInOut(duration: 0.2)) { working = true }
         Task {

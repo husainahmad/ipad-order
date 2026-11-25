@@ -233,6 +233,22 @@ struct OrderDetailSheet: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(Color.posRowOdd)
+
+                        if let remark = detail.remark?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !remark.isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "note.text")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.posTextSecondary)
+                                Text("Note: \(remark)")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.posTextSecondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.white)
+                        }
                         ForEach(Array((detail.orderDetailSkus ?? []).enumerated()), id: \.offset) { _, sku in
                             HStack(spacing: 8) {
                                 Text(sku.skuName ?? "")

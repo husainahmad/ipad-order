@@ -312,3 +312,43 @@ struct CustomizationPayloadTests {
         #expect(item.customizationRequests[0].options[0].quantity == 2)
     }
 }
+
+// MARK: - Per-line kitchen notes
+
+struct LineRemarkPayloadTests {
+    @Test func lineKeySeparatesDifferentKitchenNotes() {
+        let plain = CartItem(productId: 10, productName: "Coffee", categoryId: 3,
+                             skuId: 101, skuName: "Large", price: 50, quantity: 1)
+        let noOnion = CartItem(productId: 10, productName: "Coffee", categoryId: 3,
+                               skuId: 101, skuName: "Large", price: 50, quantity: 1,
+                               remark: "no onion")
+        let extraOnion = CartItem(productId: 10, productName: "Coffee", categoryId: 3,
+                                  skuId: 101, skuName: "Large", price: 50, quantity: 1,
+                                  remark: "extra onion")
+
+        #expect(plain.lineKey != noOnion.lineKey)
+        #expect(noOnion.lineKey != extraOnion.lineKey)
+    }
+
+    @Test func whitespaceOnlyNoteDoesNotChangeTheLineKey() {
+        let plain = CartItem(productId: 10, productName: "Coffee", categoryId: 3,
+                             skuId: 101, skuName: "Large", price: 50, quantity: 1)
+        let blank = CartItem(productId: 10, productName: "Coffee", categoryId: 3,
+                             skuId: 101, skuName: "Large", price: 50, quantity: 1,
+                             remark: "   ")
+
+        #expect(plain.lineKey == blank.lineKey)
+    }
+
+    @Test func detailRequestCarriesTheLineNote() throws {
+        let request = OrderDetailRequest(
+            productId: 10, productName: "Coffee", categoryId: 3,
+            orderDetailSkus: [OrderDetailSkuRequest(skuId: 101, skuName: "Large", quantity: 1)],
+            remark: "no onion")
+
+        let data = try JSONEncoder().encode(request)
+        let json = String(data: data, encoding: .utf8) ?? ""
+
+        #expect(json.contains("\"remark\":\"no onion\""))
+    }
+}

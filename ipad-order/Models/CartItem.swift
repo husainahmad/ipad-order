@@ -1,6 +1,6 @@
 import Foundation
 
-struct CartItem: Identifiable, Hashable {
+struct CartItem: Identifiable, Hashable, Codable {
     let productId: Int
     let productName: String
     let categoryId: Int
@@ -9,13 +9,20 @@ struct CartItem: Identifiable, Hashable {
     let price: Double
     var quantity: Int
     var customizations: [SelectedCustomization] = []
+    /// Kitchen instruction for this line. Two lines of the same product, SKU and
+    /// options with different notes are different lines: "no onion" and "extra
+    /// onion" are not the same instruction, and merging them would print one note
+    /// for both.
+    var remark: String? = nil
 
     /// Identity of the line, not of the product. Two lines of the same SKU with
-    /// different customization choices are different lines and must never merge.
+    /// different customization choices or notes are different lines and must
+    /// never merge.
     var id: String { lineKey }
 
     var lineKey: String {
-        Self.lineKey(productId: productId, skuId: skuId, optionIds: customizationOptionIds)
+        Self.lineKey(productId: productId, skuId: skuId,
+                     optionIds: customizationOptionIds, remark: remark)
     }
 
     /// Sorted, with each choice repeated once per unit, so that picking the same
@@ -45,11 +52,14 @@ struct CartItem: Identifiable, Hashable {
             }
     }
 
-    static func lineKey(productId: Int, skuId: Int, optionIds: [Int]) -> String {
+    static func lineKey(productId: Int, skuId: Int, optionIds: [Int],
+                        remark: String? = nil) -> String {
         let options = optionIds.sorted().map(String.init)
-        return options.isEmpty
+        let base = options.isEmpty
             ? "\(productId)-\(skuId)"
             : "\(productId)-\(skuId)-\(options.joined(separator: "_"))"
+        let note = (remark ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return note.isEmpty ? base : "\(base)|r:\(note)"
     }
 
     /// Display-only surcharge. The client cannot know the operator's price tier, so this

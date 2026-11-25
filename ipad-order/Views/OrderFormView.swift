@@ -10,7 +10,6 @@ struct OrderFormView: View {
     @State private var showOrderDetails = false
     @State private var showSummary = false
     @State private var showCustomerPicker = false
-    @State private var confirmingOrder = false
 
     private let repository = MenuRepository()
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
@@ -406,19 +405,22 @@ struct OrderFormView: View {
             }
             HStack(spacing: 8) {
                 Button("Confirm") {
-                    confirmingOrder = true
-                    Task {
-                        let success = await formVM.confirmOrder(customerName: tab.customer, discount: CurrencyUtils.digitsOnly(tab.discount), remark: tab.remark)
-                        confirmingOrder = false
-                        if success { showConfirm = true }
-                        else if let error = formVM.error, !error.isEmpty { toastManager.show(error, style: .error) }
+                    // Do NOT create the order here. Creating it on Confirm and then
+                    // re-creating it when the cashier edits the customer/payment in the
+                    // dialog produced a duplicate (an orphaned unpaid order plus the paid
+                    // one). The dialog now creates the order exactly once on "Confirm & Pay",
+                    // so payment always uses the same order id.
+                    guard !tab.items.isEmpty else {
+                        toastManager.show(L10n.t("Cart is empty"), style: .info)
+                        return
                     }
+                    formVM.error = nil
+                    showConfirm = true
                 }
                 .buttonStyle(PosButtonStyle(filled: true))
-                .disabled(tab.items.isEmpty || confirmingOrder)
-                .opacity((tab.items.isEmpty || confirmingOrder) ? 0.4 : 1)
+                .disabled(tab.items.isEmpty)
+                .opacity(tab.items.isEmpty ? 0.4 : 1)
                 .animation(.easeOut(duration: 0.15), value: tab.items.isEmpty)
-                .animation(.easeOut(duration: 0.15), value: confirmingOrder)
 
                 Button("Print") { printKitchen() }
                     .buttonStyle(PosButtonStyle(filled: false, outlineColor: .posBlueAction))

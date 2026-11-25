@@ -29,8 +29,17 @@ struct ContentView: View {
         .id(contentLocale.identifier)
         .environmentObject(themeManager)
         .environmentObject(toastManager)
+        .onAppear {
+            // Already signed in at launch: bring back the open orders left on disk.
+            if session.isLoggedIn { orderFormVM.restoreDrafts() }
+        }
         .onChange(of: session.isLoggedIn) { loggedIn in
-            if !loggedIn {
+            if loggedIn {
+                // Restore any open orders saved before the last sign-out.
+                orderFormVM.restoreDrafts()
+            } else {
+                // Keep the drafts on disk; only the in-memory cart is cleared so a
+                // stale cart is not shown while logged out.
                 orderFormVM.reset()
             }
         }

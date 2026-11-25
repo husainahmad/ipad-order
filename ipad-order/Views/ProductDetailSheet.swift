@@ -73,7 +73,9 @@ struct ProductDetailPopup: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: Color.black.opacity(0.18), radius: 24, x: 0, y: 10)
         .onAppear {
-            note = formVM.activeTab?.remark ?? ""
+            // This note belongs to the line being added, not to the whole order.
+            // The order-level note lives in the Order Details panel.
+            note = ""
             if skus.count == 1 { selectedSkuId = skus.first?.id }
         }
         .task(id: product.id) { await formVM.loadCustomizations(productId: product.id) }
@@ -228,7 +230,7 @@ struct ProductDetailPopup: View {
 
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            groupHeader(title: "Kitchen note", hint: nil)
+            groupHeader(title: "Item note", hint: nil)
             TextEditor(text: $note)
                 .font(.system(size: 14))
                 .foregroundColor(.posTextPrimary)
@@ -304,8 +306,8 @@ struct ProductDetailPopup: View {
 
     private func addToCart() {
         guard let sku = selectedSku else { return }
-        formVM.addToCart(product: product, sku: sku, customizations: pending, quantity: quantity)
-        formVM.setRemark(note)
+        formVM.addToCart(product: product, sku: sku, customizations: pending,
+                         quantity: quantity, remark: note)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         onClose()
     }

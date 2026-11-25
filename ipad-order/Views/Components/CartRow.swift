@@ -33,6 +33,15 @@ struct CartRow: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
+
+                if let remark = item.remark?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !remark.isEmpty {
+                    Text("Note: \(remark)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.posTextSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

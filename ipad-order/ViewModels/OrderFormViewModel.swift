@@ -38,6 +38,31 @@ final class OrderTab: ObservableObject, Identifiable {
         self.idempotencyKey = UUID().uuidString
     }
 
+    /// Rebuilds a tab from a draft saved before the app was signed out or closed.
+    init(draft: PersistedOrderTab) {
+        self.id = draft.id
+        self.label = draft.label
+        self.items = draft.items
+        self.customer = draft.customer
+        self.customerRecord = draft.customerRecord
+        self.discount = draft.discount
+        self.remark = draft.remark
+        self.storeServiceTypesId = draft.storeServiceTypesId
+        self.idempotencyKey = draft.idempotencyKey
+    }
+
+    var draft: PersistedOrderTab {
+        PersistedOrderTab(id: id,
+                          label: label,
+                          items: items,
+                          customer: customer,
+                          customerRecord: customerRecord,
+                          discount: discount,
+                          remark: remark,
+                          storeServiceTypesId: storeServiceTypesId,
+                          idempotencyKey: idempotencyKey)
+    }
+
     func rotateIdempotencyKey() {
         idempotencyKey = UUID().uuidString
         confirmedOrder = nil
@@ -101,6 +126,34 @@ final class OrderFormViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Draft persistence
+
+    /// Drafts are keyed by cashier so a different login on the same tablet cannot
+    /// surface the previous person's open cart.
+    private static func draftsKey() -> String {
+        let user = TokenManager.username.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "pos_order_drafts_v1_" + (user.isEmpty ? "default" : user)
+    }
+
+    /// Writes the open orders to disk. Called after every order-affecting edit, so a
+    /// sign-out — expected or not — never costs the cashier the cart.
+    private func persistDrafts() {
+        guard let data = try? JSONEncoder().encode(tabs.map(\.draft)) else { return }
+        UserDefaults.standard.set(data, forKey: Self.draftsKey())
+    }
+
+    /// Brings back open orders saved before the last sign-out. Idempotent: it only
+    /// fills an empty tab list so a live cart is never overwritten.
+    func restoreDrafts() {
+        guard tabs.isEmpty else { return }
+        guard let data = UserDefaults.standard.data(forKey: Self.draftsKey()),
+              let drafts = try? JSONDecoder().decode([PersistedOrderTab].self, from: data),
+              !drafts.isEmpty else { return }
+        tabs = drafts.map(OrderTab.init(draft:))
+        sequence = drafts.map(\.id).max() ?? 0
+        selectedPage = 0
+    }
+
     @discardableResult
     func createNewTab() -> Int {
         sequence += 1
@@ -108,6 +161,7 @@ final class OrderFormViewModel: ObservableObject {
         tabs.append(tab)
         error = nil
         selectedPage = tab.id
+        persistDrafts()
         return tab.id
     }
 
@@ -124,6 +178,7 @@ final class OrderFormViewModel: ObservableObject {
             tab.customerRecord = nil
         }
         invalidatePendingOrder(tab)
+        persistDrafts()
     }
 
     /// Binds a registered customer to the order. The name travels with the id so a
@@ -133,6 +188,7 @@ final class OrderFormViewModel: ObservableObject {
         tab.customerRecord = customer
         tab.customer = customer.nameValue.isEmpty ? customer.phoneValue : customer.nameValue
         invalidatePendingOrder(tab)
+        persistDrafts()
     }
 
     /// Returns the order to a walk-in: no id, no name.
@@ -141,24 +197,28 @@ final class OrderFormViewModel: ObservableObject {
         tab.customerRecord = nil
         tab.customer = ""
         invalidatePendingOrder(tab)
+        persistDrafts()
     }
 
     func setDiscount(_ value: String) {
         guard let tab = activeTab, tab.discount != value else { return }
         tab.discount = value
         invalidatePendingOrder(tab)
+        persistDrafts()
     }
 
     func setRemark(_ value: String) {
         guard let tab = activeTab, tab.remark != value else { return }
         tab.remark = value
         invalidatePendingOrder(tab)
+        persistDrafts()
     }
 
     func setStoreServiceType(_ id: Int) {
         guard let tab = activeTab, tab.storeServiceTypesId != id else { return }
         tab.storeServiceTypesId = id
         invalidatePendingOrder(tab)
+        persistDrafts()
     }
 
     func customizations(for productId: Int) -> [ProductCustomization] {
@@ -188,11 +248,12 @@ final class OrderFormViewModel: ObservableObject {
     }
 
     func addToCart(product: Product, sku: Sku, customizations: [SelectedCustomization] = [],
-                   quantity: Int = 1) {
+                   quantity: Int = 1, remark: String? = nil) {
         guard let tab = activeTab else { return }
         let qty = max(1, quantity)
+        let note = normalizedRemark(remark)
         let key = CartItem.lineKey(productId: product.id, skuId: sku.id,
-                                   optionIds: customizations.flatOptionIds)
+                                   optionIds: customizations.flatOptionIds, remark: note)
         if let index = tab.items.firstIndex(where: { $0.lineKey == key }) {
             tab.items[index].addQuantity(qty)
         } else {
@@ -203,9 +264,19 @@ final class OrderFormViewModel: ObservableObject {
                                       skuName: sku.name ?? "",
                                       price: sku.price,
                                       quantity: qty,
-                                      customizations: customizations))
+                                      customizations: customizations,
+                                      remark: note))
         }
         invalidatePendingOrder(tab)
+        persistDrafts()
+    }
+
+    /// Trims a kitchen note and treats whitespace-only input as no note, so the
+    /// line key does not grow a separator for a note that will not print.
+    private func normalizedRemark(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     func increment(lineKey: String) {
@@ -213,6 +284,7 @@ final class OrderFormViewModel: ObservableObject {
               let index = tab.items.firstIndex(where: { $0.lineKey == lineKey }) else { return }
         tab.items[index].addQuantity(1)
         invalidatePendingOrder(tab)
+        persistDrafts()
     }
 
     func decrement(lineKey: String) {
@@ -223,6 +295,7 @@ final class OrderFormViewModel: ObservableObject {
             tab.items.remove(at: index)
         }
         invalidatePendingOrder(tab)
+        persistDrafts()
     }
 
     func removeItem(lineKey: String) {
@@ -232,6 +305,7 @@ final class OrderFormViewModel: ObservableObject {
             tab.items.remove(at: index)
         }
         invalidatePendingOrder(tab)
+        persistDrafts()
     }
 
     /// Called whenever any order-affecting input changes. Clears the known
@@ -259,6 +333,7 @@ final class OrderFormViewModel: ObservableObject {
         tabs.remove(at: index)
         confirmedOrder = nil
         error = nil
+        persistDrafts()
         if tabs.isEmpty {
             selectedPage = 0
             return -1
@@ -320,14 +395,28 @@ final class OrderFormViewModel: ObservableObject {
         }
     }
 
+    /// Groups cart lines by product and line note. The order service stores the
+    /// note on `order_details`, one row per group, so two SKUs of the same product
+    /// with different notes must travel as two groups or one note would be lost.
+    private struct OrderLineGroupKey: Hashable {
+        let productId: Int
+        let remark: String?
+    }
+
     private func buildRequest(tab: OrderTab, customerName: String,
                               discount: String, remark: String) -> OrderRequest {
-        var grouped: [Int: [CartItem]] = [:]
+        var grouped: [OrderLineGroupKey: [CartItem]] = [:]
         for item in tab.items {
-            grouped[item.productId, default: []].append(item)
+            let key = OrderLineGroupKey(productId: item.productId, remark: item.remark)
+            grouped[key, default: []].append(item)
+        }
+        let sortedGroups = grouped.values.sorted {
+            let left = ($0.first?.productName ?? "", $0.first?.remark ?? "")
+            let right = ($1.first?.productName ?? "", $1.first?.remark ?? "")
+            return left < right
         }
         var details: [OrderDetailRequest] = []
-        for group in grouped.values.sorted(by: { $0.first?.productName ?? "" < $1.first?.productName ?? "" }) {
+        for group in sortedGroups {
             guard let first = group.first else { continue }
             let skus = group.map {
                 OrderDetailSkuRequest(skuId: $0.skuId,
@@ -338,7 +427,8 @@ final class OrderFormViewModel: ObservableObject {
             details.append(OrderDetailRequest(productId: first.productId,
                                               productName: first.productName,
                                               categoryId: first.categoryId,
-                                              orderDetailSkus: skus))
+                                              orderDetailSkus: skus,
+                                              remark: first.remark))
         }
         // Only a customer whose identity still matches the till input counts as
         // linked. The cashier may have renamed the order after picking someone;
@@ -351,4 +441,19 @@ final class OrderFormViewModel: ObservableObject {
                             remark: remark,
                             orderDetails: details, discount: discount)
     }
+}
+
+/// The part of an open order that survives a sign-out or an app restart. The
+/// server-side confirmed order is deliberately not stored: the idempotency key is,
+/// so confirming again returns the same order instead of creating a duplicate.
+struct PersistedOrderTab: Codable {
+    let id: Int
+    let label: String
+    let items: [CartItem]
+    let customer: String
+    let customerRecord: Customer?
+    let discount: String
+    let remark: String
+    let storeServiceTypesId: Int
+    let idempotencyKey: String
 }
